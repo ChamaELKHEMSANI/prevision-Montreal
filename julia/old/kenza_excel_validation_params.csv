@@ -1,0 +1,20 @@
+source,name,value
+Full Kenza,full_price_scale,30
+Full Kenza,full_penetration,0.8193343775346827
+Full Kenza,distribution_a,1.1572
+Full Kenza,distribution_b,4.3517429
+Full Kenza,k1_c,-6.59917386
+Full Kenza,k2_d,0.39546328
+Indexed Kenza,ref_year,2015
+Indexed Kenza,ref_gdp_per_capita,51774.290884608614
+Indexed Kenza,ref_normalized_traffic,0.0781236379737098
+Indexed Kenza,distribution_a,1.1572
+Indexed Kenza,distribution_b,4.3517429
+Indexed Kenza,k1_c,-6.59917386
+Indexed Kenza,simplified_elasticity,-1.728566864526717
+Simplified  Kenza,ref_year,2015
+Simplified  Kenza,ref_gdp_per_capita,51774.290884608614
+Simplified  Kenza,ref_normalized_traffic,0.0781236379737098
+Simplified  Kenza,linear_a,-0.13504193193763592
+Simplified  Kenza,linear_b,0.21316556991134572
+Simplified  Kenza,elasticity,-1.728566864526717
