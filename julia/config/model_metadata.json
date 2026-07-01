@@ -1,0 +1,225 @@
+{
+  "kenza": {
+    "active": true,
+    "label": "Kenza Econometric",
+    "category": "traditionnels",
+    "default_params": {
+      "k1": -6.59917386,
+      "k2": 0.39546328,
+      "distribution_a": 1.1572,
+      "distribution_b": 4.3517429,
+      "full_price_scale": 30.0,
+      "full_penetration": 0.8193343775346827,
+      "optimize_parameters": false,
+      "trend_weight": 1.0
+    },
+    "explanation": "Modele econometrique inspire de Kenza: il relie trafic, revenu, population et prix du billet pour estimer une demande potentielle a long terme.",
+    "details": {
+      "formula": "D(t) = f(Population(t), PIB/habitant(t), Prix billet(t), distribution des revenus)",
+      "description": "Modele meso-economique inspire de la logique Kenza/Sallier. Il estime la demande aerienne a partir de variables economiques et d une distribution de capacite a consommer.",
+      "parameters": [
+        "distribution_a: coefficient a Excel de la courbe Kenza",
+        "distribution_b: coefficient b Excel de la courbe Kenza",
+        "k1: coefficient c Excel de la courbe Kenza",
+        "k2: coefficient d Excel de la courbe Kenza",
+        "full_price_scale: facteur B1 Excel applique au ratio prix / PIB habitant",
+        "full_penetration: facteur B2 Excel applique a la population",
+        "optimize_parameters: si active, recalibre k1/k2 sur l'historique",
+        "trend_weight: poids de la tendance historique"
+      ],
+      "advantages": [
+        "Approche economique interpretable",
+        "Adapte aux horizons longs",
+        "Relie explicitement prix, revenu et population"
+      ],
+      "limits": [
+        "Depend de variables macroeconomiques fiables",
+        "Calibration sensible sur petits jeux de donnees",
+        "Hypotheses fortes sur la stabilite des comportements"
+      ]
+    }
+  },
+  "kenza_simplifie": {
+    "active": true,
+    "label": "Kenza Simplifie",
+    "category": "traditionnels",
+    "default_params": {
+      "C1": -0.5,
+      "C2": 0.5,
+      "optimize_parameters": false,
+      "ticket_price_inflation": 0.02,
+      "population_growth_rate": 0.01,
+      "gdp_growth_rate": 0.03,
+      "monte_carlo_simulations": 0,
+      "linear_window_min_r2": 0.98,
+      "min_calibration_points": 5
+    },
+    "explanation": "Version lineaire de Kenza: la demande par habitant est expliquee par le prix du billet normalise par le PIB par habitant.",
+    "details": {
+      "formula": "Dn(t) = C1 * pn(t) + C2, avec Dn = passagers / population et pn = prix billet / PIB par habitant",
+      "description": "Version lineaire et pedagogique de Kenza. Elle explique la demande normalisee par le prix relatif du transport aerien.",
+      "parameters": [
+        "C1: sensibilite au prix normalise, generalement negative",
+        "C2: niveau de demande normalisee",
+        "ticket_price_inflation: hypothese de prix futur",
+        "population_growth_rate et gdp_growth_rate: scenarios macro"
+      ],
+      "advantages": [
+        "Tres interpretable",
+        "Rapide a calibrer",
+        "Bonne base academique pour expliquer les elasticites"
+      ],
+      "limits": [
+        "Approximation lineaire",
+        "Necessite ticket_price",
+        "Peut mal capter les ruptures structurelles"
+      ]
+    }
+  },
+  "kenza_simplifie_combine": {
+    "active": true,
+    "label": "Kenza Simplifie Combine",
+    "category": "traditionnels",
+    "default_params": {
+      "trend_weight": 0.5,
+      "optimize_parameters": false,
+      "ticket_price_inflation": 0.02,
+      "population_growth_rate": 0.01,
+      "gdp_growth_rate": 0.03
+    },
+    "explanation": "Version simplifiee proche Excel combinant une composante tendance et une composante elasticite prix/revenu.",
+    "details": {
+      "formula": "Dn = w * tendance(annee) + (1-w) * elasticite(prix normalise)",
+      "description": "Calibre deux regressions sur la demande normalisee, puis combine les deux trajectoires avec trend_weight.",
+      "parameters": [
+        "trend_weight: poids de la composante tendance entre 0 et 1",
+        "ticket_price_inflation: hypothese de prix futur",
+        "population_growth_rate et gdp_growth_rate: scenarios macro"
+      ],
+      "advantages": [
+        "Plus proche de la feuille Simplified Kenza Excel",
+        "Expose explicitement le compromis tendance/elasticite"
+      ],
+      "limits": [
+        "Depend des hypotheses macro futures",
+        "Approximation de la logique Excel complete"
+      ]
+    }
+  },
+  "kenza_simplifie_indexe": {
+    "active": true,
+    "label": "Kenza Simplifie Indexe",
+    "category": "traditionnels",
+    "default_params": {
+      "C1": -0.5,
+      "C2": 0.5,
+      "optimize_parameters": false,
+      "population_growth_rate": 0.01,
+      "gdp_growth_rate": 0.03
+    },
+    "explanation": "Version indexee de Kenza simplifie qui estime la demande aerienne sans utiliser directement le prix du billet. Elle emploie un indice fonde sur l'evolution du PIB par habitant par rapport a une annee de reference.",
+    "details": {
+      "formula": "pn(t) = PIB_ref / PIB_habitant(t), Dn(t) = max(0, C1 * pn(t) + C2), D(t) = Population(t) * Dn(t) * facteur_continuite",
+      "description": "Modele lineaire indexe adapte aux jeux de donnees sans prix du billet. Le premier PIB par habitant observe sert de reference. Les coefficients C1 et C2 peuvent etre calibres automatiquement, puis un facteur de continuite raccorde la prevision au dernier niveau historique.",
+      "parameters": [
+        "C1: sensibilite de la demande normalisee a l'indice inverse de PIB par habitant",
+        "C2: niveau de base de la demande normalisee",
+        "optimize_parameters: calibre automatiquement C1 et C2 par moindres carres",
+        "population_growth_rate: hypothese de croissance annuelle de la population",
+        "gdp_growth_rate: hypothese de croissance annuelle du PIB par habitant"
+      ],
+      "advantages": [
+        "Ne necessite pas de donnees de prix du billet",
+        "Modele simple, rapide et interpretable",
+        "Raccord automatique avec le dernier niveau de trafic observe"
+      ],
+      "limits": [
+        "L'indice de PIB remplace imparfaitement le prix relatif du transport aerien",
+        "Le premier PIB observe influence toute l'indexation",
+        "La relation lineaire capte mal les ruptures structurelles et les saturations"
+      ]
+    }
+  },
+  "kenza_indexed": {
+    "active": true,
+    "label": "Kenza Indexed Logistique",
+    "category": "traditionnels",
+    "default_params": {
+      "k1": -6.59917386,
+      "k2": 0.39546328,
+      "distribution_a": 1.1572,
+      "distribution_b": 4.3517429,
+      "ref_year": 0,
+      "ref_gdp_per_capita": 0.0,
+      "ref_normalized_traffic": 0.0,
+      "ref_elasticity": -1.728566864526717,
+      "fare_growth_rate": 0.0,
+      "optimize_parameters": false
+    },
+    "explanation": "Version indexee logistique de Kenza sans prix direct, fidele a la feuille Excel 'Indexed Kenza' : reconstruit un indice de prix implicite a partir du trafic historique, puis le maintient constant (ou le fait croitre a fare_growth_rate) pour les annees futures.",
+    "details": {
+      "formula": "D(t) = K1 * F(K2 * T * GDPc_ref/GDPc(t)) * Pop(t), avec F(r)=min(1, a*(1-1/(1+exp(b+c*r^d))))",
+      "description": "K2 est cale pour que l'elasticite du modele egale ref_elasticity ; K1 est cale pour reproduire exactement le trafic normalise de l'annee de reference. T est reconstruit sur l'historique en inversant la courbe Kenza a partir du trafic observe, puis tenu constant (fare_growth_rate=0 par defaut) pour la prevision, comme dans le classeur Excel.",
+      "parameters": [
+        "distribution_a/b et k1/k2: coefficients a,b,c,d Excel (identiques a Full Kenza pour un meme flux)",
+        "ref_year/ref_gdp_per_capita/ref_normalized_traffic: annee et valeurs de reference (0 = calcule depuis les donnees)",
+        "ref_elasticity: elasticite de reference utilisee pour caler K2 (specifique au flux/region calibre dans Excel)",
+        "fare_growth_rate: taux de croissance applique a l indice de prix implicite T pour les annees futures (0 = constant, comme Excel par defaut)"
+      ],
+      "advantages": [
+        "Ne necessite pas de prix billet",
+        "Reproduit fidelement la logique de la feuille Excel Indexed Kenza (verifie numeriquement)"
+      ],
+      "limits": [
+        "ref_elasticity doit etre recalibre pour tout flux/region different de celui du classeur Kenza.xlsx fourni",
+        "fare_growth_rate=0 par defaut suppose un indice de prix implicite stable ; a ajuster si un scenario different est souhaite"
+      ]
+    }
+  },
+  "kenza_probabilistic": {
+    "active": true,
+    "label": "Kenza Probabiliste",
+    "category": "traditionnels",
+    "default_params": {
+      "k1": -6.59917386,
+      "k2": 0.39546328,
+      "distribution_a": 1.1572,
+      "distribution_b": 4.3517429,
+      "optimize_parameters": false,
+      "n_simulations": 1000,
+      "bootstrap_type": "parametric",
+      "ticket_price_inflation": 0.02,
+      "population_growth_rate": 0.01,
+      "gdp_growth_rate": 0.03,
+      "monte_carlo_simulations": 0
+    },
+    "explanation": "Modèle Kenza probabiliste : calibration par bootstrap des paramètres K1 et K2 sur des échantillons rééchantillonnés des données historiques. La prévision produit une distribution de trajectoires, permettant des intervalles de confiance (quantiles 5%, 25%, 75%, 95%).",
+    "details": {
+      "formula": "D(t) = P(t) · K̃₁ · σ(a - b · K̃₂ · ρ(t)) avec (K̃₁, K̃₂) tirés de la distribution bootstrapée",
+      "description": "Version probabiliste de la première loi de Kenza. Le modèle est recalibré N fois sur des échantillons bootstrapés des données historiques, ce qui génère une distribution empirique des paramètres K1 et K2. La prévision finale est l'ensemble des trajectoires résultantes, permettant de quantifier l'incertitude sur la demande future.",
+      "parameters": [
+        "k1: niveau global de demande (valeur initiale pour la calibration)",
+        "k2: sensibilité au prix normalisé (valeur initiale)",
+        "distribution_a/b: forme de la distribution des revenus",
+        "optimize_parameters: active la recherche des meilleurs k1, k2 sur chaque bootstrap",
+        "n_simulations: nombre de tirages bootstrap (≥ 100 recommandé)",
+        "bootstrap_type: 'parametric' (rééchantillonnage des lignes) ou 'residual' (résidus)",
+        "ticket_price_inflation: hypothèse d'évolution future du prix",
+        "population_growth_rate: hypothèse de croissance démographique",
+        "gdp_growth_rate: hypothèse de croissance du PIB par habitant"
+      ],
+      "advantages": [
+        "Fournit des intervalles de confiance réalistes sur les prévisions",
+        "Permet d'évaluer la stabilité des paramètres K1 et K2",
+        "S'intègre facilement dans une approche de gestion du risque",
+        "Conserve l'interprétabilité économique du modèle Kenza"
+      ],
+      "limits": [
+        "Temps de calcul plus long (proportionnel à n_simulations)",
+        "Nécessite un historique suffisamment long pour un bootstrap significatif",
+        "La qualité des intervalles dépend de la représentativité des échantillons bootstrapés",
+        "Ne capture pas les ruptures structurelles non présentes dans l'historique"
+      ]
+    }
+  }
+}
