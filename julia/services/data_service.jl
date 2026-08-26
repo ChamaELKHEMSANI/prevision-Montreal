@@ -30,7 +30,11 @@ function process_uploaded_file(filepath::String)
     df = if endswith(lowercase(filepath), ".csv")
         _read_csv_bytes(read(filepath))
     elseif endswith(lowercase(filepath), ".xlsx") || endswith(lowercase(filepath), ".xls")
-        XLSX.readdata(filepath, "Sheet1") |> DataFrame
+        # `XLSX.readdata(path, "Sheet1")` attend une reference de cellule, pas un nom de
+        # feuille : tout .xlsx echouait ici avec `XLSXError: Sheet1 is not a valid
+        # SheetCellRef`. Le nom de feuille etait de surcroit code en dur. On utilise le meme
+        # appel que process_uploaded_bytes, qui lit la premiere feuille avec ses en-tetes.
+        XLSX.readtable(filepath, 1) |> DataFrame
     else
         error("Unsupported file type: $(splitext(filepath)[2])")
     end

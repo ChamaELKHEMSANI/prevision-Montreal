@@ -125,7 +125,8 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     model.reference_ticket_price = _reference_ticket_price(data)
     
     # Calcul du prix normalisé
-    rho_t = _full_kenza_index(data.ticket_price, data.gdp_per_capita, model.parameters["full_price_scale"])
+    prices = _sanitize_prices(data.ticket_price, model.reference_ticket_price)
+    rho_t = _full_kenza_index(prices, data.gdp_per_capita, model.parameters["full_price_scale"])
     
     a = Float64(model.parameters["distribution_a"])
     b = Float64(model.parameters["distribution_b"])
@@ -170,27 +171,17 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
         error("Model not fitted")
     end
     
-    last_year = model.train_data[end, "year"]
-    last_pop = model.train_data[end, "population"]
-    last_gdp = model.train_data[end, "gdp_per_capita"]
-    last_price = model.train_data[end, "ticket_price"]
-    
-    gdp_growth = _kw(kwargs, :gdp_growth_rate, 0.03)
-    pop_growth = _kw(kwargs, :population_growth_rate, 0.01)
-    price_inflation = _kw(kwargs, :ticket_price_inflation, 0.02)
+    # La projection macro passe par `_future_macro` plutot que d'etre redupliquee ici :
+    # les trois `predict` en portaient chacun une copie, privee des gardes de l'original.
+    # Un dernier prix a NaN donnait ainsi une prevision NaN, et un prix manquant une
+    # MethodError, pour les seuls modeles qui n'appelaient pas `_future_macro`.
+    # Le repli qui suivait ("si pas de prix futur, utiliser le dernier prix historique")
+    # remplissait avec `last_price`, c'est-a-dire la valeur manquante elle-meme : sans effet.
+    # `_future_macro` retient un prix valide en amont.
+    last_year, pops, gdps, prices = _future_macro(model.train_data, horizon, kwargs)
     apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
-    
     future_years = collect(last_year+1 : last_year+horizon)
-    pops = last_pop .* (1 .+ pop_growth) .^ (1:horizon)
-    gdps = last_gdp .* (1 .+ gdp_growth) .^ (1:horizon)
-    prices = last_price .* (1 .+ price_inflation) .^ (1:horizon)
-    
-    # CORRECTION : Si pas de prix futur, utiliser le dernier prix historique
-    # (comme Excel qui ne projette pas fare)
-    if all(ismissing.(prices)) || all(isnan.(prices))
-        prices = fill(last_price, horizon)
-    end
-    
+
     rho_t = _full_kenza_index(prices, gdps, model.parameters["full_price_scale"])
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
                             model.parameters["k1"], model.parameters["k2"])
@@ -205,7 +196,8 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
     lower = similar(pred); upper = similar(pred)
     
     if n_sims > 0
-        train_rho = _full_kenza_index(model.train_data.ticket_price, model.train_data.gdp_per_capita,
+        train_prices = _sanitize_prices(model.train_data.ticket_price, model.reference_ticket_price)
+        train_rho = _full_kenza_index(train_prices, model.train_data.gdp_per_capita,
                                       model.parameters["full_price_scale"])
         train_F = _kenza_distribution(train_rho, model.parameters["distribution_a"], model.parameters["distribution_b"],
                                       model.parameters["k1"], model.parameters["k2"])
@@ -281,7 +273,7 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     # Normalisation identique à Excel
     ref_gdp = model.reference_gdp_per_cap
     ref_price = model.reference_ticket_price
-    pn = (data.ticket_price ./ data.gdp_per_capita) .* (ref_gdp / ref_price)
+    pn = (_sanitize_prices(data.ticket_price, ref_price) ./ data.gdp_per_capita) .* (ref_gdp / ref_price)
     pn = clamp.(pn, 0.2, 3.0)
     
     dn = data.actual_passengers ./ max.(data.population, 1e-8)
@@ -314,20 +306,13 @@ function AbstractModel.predict(model::KenzaSimplifieModel, horizon::Int; kwargs.
         error("Model not fitted")
     end
     
-    last_year = model.train_data[end, "year"]
-    last_pop = model.train_data[end, "population"]
-    last_gdp = model.train_data[end, "gdp_per_capita"]
-    last_price = model.train_data[end, "ticket_price"]
-    
-    gdp_growth = _kw(kwargs, :gdp_growth_rate, 0.03)
-    pop_growth = _kw(kwargs, :population_growth_rate, 0.01)
-    price_inflation = _kw(kwargs, :ticket_price_inflation, 0.02)
-    
+    # La projection macro passe par `_future_macro` plutot que d'etre redupliquee ici :
+    # les trois `predict` en portaient chacun une copie, privee des gardes de l'original.
+    # Un dernier prix a NaN donnait ainsi une prevision NaN, et un prix manquant une
+    # MethodError, pour les seuls modeles qui n'appelaient pas `_future_macro`.
+    last_year, pops, gdps, prices = _future_macro(model.train_data, horizon, kwargs)
     future_years = collect(last_year+1 : last_year+horizon)
-    pops = last_pop .* (1 .+ pop_growth) .^ (1:horizon)
-    gdps = last_gdp .* (1 .+ gdp_growth) .^ (1:horizon)
-    prices = last_price .* (1 .+ price_inflation) .^ (1:horizon)
-    
+
     # Même normalisation que dans fit!
     ref_gdp = model.reference_gdp_per_cap
     ref_price = model.reference_ticket_price
@@ -507,7 +492,7 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
         idx = rand(1:nrow(data), nrow(data))
         boot_data = data[idx, :]
         
-        T_t = boot_data.ticket_price ./ reference_ticket_price
+        T_t = _sanitize_prices(boot_data.ticket_price, reference_ticket_price) ./ reference_ticket_price
         rho_t = _normalized_price(T_t, boot_data.gdp_per_capita, reference_gdp_per_cap)
         
         if model.parameters["optimize_parameters"]
@@ -550,7 +535,7 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     model.parameters["k1"] = mean(k1_samples)
     model.parameters["k2"] = mean(k2_samples)
     
-    T_t = data.ticket_price ./ reference_ticket_price
+    T_t = _sanitize_prices(data.ticket_price, reference_ticket_price) ./ reference_ticket_price
     rho_t = _normalized_price(T_t, data.gdp_per_capita, reference_gdp_per_cap)
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
                             model.parameters["k1"], model.parameters["k2"])
@@ -578,20 +563,13 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
     residuals = get(model.param_distribution, "residuals", Float64[])
     n_sim = length(k1_samples)
     
-    last_year = model.train_data[end, "year"]
-    last_pop = model.train_data[end, "population"]
-    last_gdp = model.train_data[end, "gdp_per_capita"]
-    last_price = model.train_data[end, "ticket_price"]
-    
-    gdp_growth = _kw(kwargs, :gdp_growth_rate, 0.03)
-    pop_growth = _kw(kwargs, :population_growth_rate, 0.01)
-    price_inflation = _kw(kwargs, :ticket_price_inflation, 0.02)
+    # La projection macro passe par `_future_macro` plutot que d'etre redupliquee ici :
+    # les trois `predict` en portaient chacun une copie, privee des gardes de l'original.
+    # Un dernier prix a NaN donnait ainsi une prevision NaN, et un prix manquant une
+    # MethodError, pour les seuls modeles qui n'appelaient pas `_future_macro`.
+    last_year, pops, gdps, prices = _future_macro(model.train_data, horizon, kwargs)
     apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
-    
     future_years = collect(last_year+1 : last_year+horizon)
-    pops = last_pop .* (1 .+ pop_growth) .^ (1:horizon)
-    gdps = last_gdp .* (1 .+ gdp_growth) .^ (1:horizon)
-    prices = last_price .* (1 .+ price_inflation) .^ (1:horizon)
     
     # Doit reproduire exactement la reference retenue par fit!, garde compris.
     reference_ticket_price = _reference_ticket_price(model.train_data)
@@ -880,8 +858,25 @@ function _reference_ticket_price(data::DataFrame)::Float64
     return Float64(data[idx, "ticket_price"])
 end
 
+"""
+    _sanitize_prices(ticket_price, reference) -> Vector{Float64}
+
+Remplace par `reference` les prix inexploitables (manquants, nuls, negatifs, non finis).
+
+`_price_index` appliquait deja cette substitution ; KenzaModel et KenzaSimplifieModel
+consommaient au contraire `data.ticket_price` brut, si bien qu'un seul `missing` dans la
+serie historique propageait une MethodError depuis `Float64(::Missing)` — et ce alors que
+Validators n'exige la completude que de `year` et `actual_passengers`.
+
+Le test `ismissing` doit precede tout appel a `Float64`, qui n'accepte pas `missing`.
+"""
+function _sanitize_prices(ticket_price, reference::Float64)::Vector{Float64}
+    valid(v) = !ismissing(v) && v isa Number && isfinite(Float64(v)) && Float64(v) > 0
+    return Float64[valid(v) ? Float64(v) : reference for v in ticket_price]
+end
+
 function _price_index(ticket_price, gdp_per_capita, reference_ticket_price::Float64, reference_gdp::Float64)
-    safe_price = [isfinite(Float64(v)) && Float64(v) > 0 ? Float64(v) : reference_ticket_price for v in ticket_price]
+    safe_price = _sanitize_prices(ticket_price, reference_ticket_price)
     return safe_price ./ reference_ticket_price .* (reference_gdp ./ max.(gdp_per_capita, 1e-10))
 end
 

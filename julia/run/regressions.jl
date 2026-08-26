@@ -136,6 +136,53 @@ end
         @test Models._reference_ticket_price(hopeless) == 1.0
     end
 
+    @testset "Un prix invalide en fin de serie ne contamine pas la projection" begin
+        # Les trois `predict` portaient chacun une copie de _future_macro, privee de ses
+        # gardes : un dernier prix a NaN donnait une prevision NaN, un prix manquant une
+        # MethodError, pour les seuls modeles qui n'appelaient pas _future_macro.
+        for bad in (0.0, NaN)
+            broken = copy(data)
+            broken.ticket_price = Float64.(broken.ticket_price)
+            broken.ticket_price[end] = bad
+            for name in AF.ModelRegistry.list_models()
+                model = AF.ModelRegistry.get_model(name)()
+                Abstract.fit!(model, broken)
+                @test all(isfinite, Abstract.predict(model, 3).predicted_passengers)
+            end
+        end
+
+        # Prix manquant dans la serie historique : Validators n'exige la completude que de
+        # `year` et `actual_passengers`, une telle donnee passe donc la validation avant
+        # d'atteindre les modeles. Elle ne doit pas y lever de MethodError.
+        gappy = copy(data)
+        gappy.ticket_price = Vector{Union{Missing,Float64}}(Float64.(gappy.ticket_price))
+        gappy.ticket_price[end] = missing
+        gappy.ticket_price[3] = missing
+        for name in AF.ModelRegistry.list_models()
+            model = AF.ModelRegistry.get_model(name)()
+            Abstract.fit!(model, gappy)
+            @test all(isfinite, Abstract.predict(model, 3).predicted_passengers)
+        end
+
+        # La substitution retenue est le prix de reference, comme le faisait deja _price_index.
+        @test Models._sanitize_prices([100.0, missing, 0.0, NaN, 250.0], 200.0) ==
+              [100.0, 200.0, 200.0, 200.0, 250.0]
+    end
+
+    @testset "Les deux chemins de chargement xlsx concordent" begin
+        # process_uploaded_file appelait XLSX.readdata(path, "Sheet1"), qui attend une
+        # reference de cellule et non un nom de feuille : tout .xlsx echouait avec
+        # `XLSXError: Sheet1 is not a valid SheetCellRef`.
+        workbook = joinpath(JULIA_ROOT, "data", "forecast_report.xlsx")
+        if isfile(workbook)
+            from_path = AF.DataService.process_uploaded_file(workbook)
+            from_bytes = AF.DataService.process_uploaded_bytes("forecast_report.xlsx", read(workbook))
+            @test from_path["columns"] == from_bytes["columns"]
+            @test from_path["records"] == from_bytes["records"]
+            @test "year" in from_path["columns"]
+        end
+    end
+
     @testset "Le registre dit la verite sur les colonnes requises" begin
         # `_future_macro` lisait `ticket_price` sans condition, pour la seule colonne de
         # sortie du meme nom : les deux modeles indexes echouaient donc sur un fichier sans
