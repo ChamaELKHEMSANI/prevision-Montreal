@@ -102,6 +102,40 @@ end
         end
     end
 
+    @testset "Un prix de reference invalide ne contamine pas la serie" begin
+        # `_reference_ticket_price` existait mais n'etait appelee nulle part. Le prix de la
+        # premiere ligne sert pourtant de diviseur dans _price_index et dans la
+        # normalisation de KenzaSimplifieModel : un zero ou un NaN a cette seule ligne
+        # donnait une prevision entierement nulle pour kenza_simplifie et NaN pour
+        # kenza_simplifie_combine, sans le moindre message.
+        for bad in (0.0, NaN)
+            broken = copy(data)
+            broken.ticket_price = Float64.(broken.ticket_price)
+            broken.ticket_price[1] = bad
+            for name in AF.ModelRegistry.list_models()
+                model = AF.ModelRegistry.get_model(name)()
+                Abstract.fit!(model, broken)
+                predictions = Abstract.predict(model, 3).predicted_passengers
+                @test all(isfinite, predictions)
+                @test any(>(0), predictions)
+            end
+        end
+
+        # Le repli est le premier prix valide de la serie, pas 1.0 : 1.0 n'a pas d'unite
+        # commune avec un prix et sature le clamp de KenzaSimplifieModel, ce qui reproduirait
+        # l'effondrement a zero que ce garde doit empecher.
+        shifted = copy(data)
+        shifted.ticket_price = Float64.(shifted.ticket_price)
+        shifted.ticket_price[1] = 0.0
+        @test Models._reference_ticket_price(shifted) == shifted.ticket_price[2]
+        @test Models._reference_ticket_price(data) == data.ticket_price[1]
+
+        # Aucun prix exploitable : 1.0 en dernier recours, sans exception.
+        hopeless = copy(data)
+        hopeless.ticket_price = zeros(nrow(hopeless))
+        @test Models._reference_ticket_price(hopeless) == 1.0
+    end
+
     @testset "Le registre dit la verite sur les colonnes requises" begin
         # `_future_macro` lisait `ticket_price` sans condition, pour la seule colonne de
         # sortie du meme nom : les deux modeles indexes echouaient donc sur un fichier sans

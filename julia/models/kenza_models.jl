@@ -122,7 +122,7 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     model.train_data = data
     model.reference_year = data[1, "year"]
     model.reference_gdp_per_cap = data[1, "gdp_per_capita"]
-    model.reference_ticket_price = data[1, "ticket_price"]
+    model.reference_ticket_price = _reference_ticket_price(data)
     
     # Calcul du prix normalisé
     rho_t = _full_kenza_index(data.ticket_price, data.gdp_per_capita, model.parameters["full_price_scale"])
@@ -276,7 +276,7 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     
     model.train_data = data
     model.reference_gdp_per_cap = data[1, "gdp_per_capita"]
-    model.reference_ticket_price = data[1, "ticket_price"]
+    model.reference_ticket_price = _reference_ticket_price(data)
     
     # Normalisation identique à Excel
     ref_gdp = model.reference_gdp_per_cap
@@ -485,7 +485,7 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     model.train_data = data
     reference_year = data[1, "year"]
     reference_gdp_per_cap = data[1, "gdp_per_capita"]
-    reference_ticket_price = data[1, "ticket_price"]
+    reference_ticket_price = _reference_ticket_price(data)
     
     seed = Int(model.parameters["random_seed"])
     seed != 0 && Random.seed!(seed)
@@ -593,7 +593,8 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
     gdps = last_gdp .* (1 .+ gdp_growth) .^ (1:horizon)
     prices = last_price .* (1 .+ price_inflation) .^ (1:horizon)
     
-    reference_ticket_price = model.train_data[1, "ticket_price"]
+    # Doit reproduire exactement la reference retenue par fit!, garde compris.
+    reference_ticket_price = _reference_ticket_price(model.train_data)
     reference_gdp_per_cap = model.train_data[1, "gdp_per_capita"]
     T_t = prices ./ reference_ticket_price
     rho_t = _normalized_price(T_t, gdps, reference_gdp_per_cap)
@@ -793,7 +794,7 @@ function AbstractModel.fit!(model::KenzaSimplifieCombineModel, data::DataFrame; 
     model.train_data = data
     model.reference_year = Int(data[1, "year"])
     model.reference_gdp_per_cap = Float64(data[1, "gdp_per_capita"])
-    model.reference_ticket_price = Float64(data[1, "ticket_price"])
+    model.reference_ticket_price = _reference_ticket_price(data)
     
     dn = Float64.(data.actual_passengers) ./ max.(Float64.(data.population), 1e-10)
     year_index = Float64.(data.year .- model.reference_year)
@@ -850,9 +851,33 @@ function _ensure_fitted(model)
     model.is_fitted || error("Model not fitted")
 end
 
-function _reference_ticket_price(data::DataFrame)
+"""
+    _reference_ticket_price(data) -> Float64
+
+Prix de l'annee de reference, garanti fini et strictement positif.
+
+Cette valeur sert de DIVISEUR dans `_price_index` et dans la normalisation de
+KenzaSimplifieModel, et de valeur de remplacement des prix individuels invalides. Un zero
+ou un NaN en premiere ligne se propageait donc a toute la serie : prevision entierement
+nulle pour `kenza_simplifie`, NaN pour `kenza_simplifie_combine`.
+
+Le repli est le premier prix valide de la SERIE, et non 1.0. 1.0 n'a pas d'unite commune
+avec un prix de billet : sur des donnees ou le PIB/hab vaut ~3e4, il porte le prix
+normalise a ~200, que le `clamp(., 0.2, 3.0)` de KenzaSimplifieModel ramene a 3.0, d'ou
+une prevision nulle — le defaut meme que ce garde doit empecher. 1.0 ne subsiste qu'en
+dernier recours, si aucune annee ne porte de prix exploitable.
+"""
+function _reference_ticket_price(data::DataFrame)::Float64
+    valid(v) = !ismissing(v) && v isa Number && isfinite(Float64(v)) && Float64(v) > 0
     value = data[1, "ticket_price"]
-    return isfinite(Float64(value)) && Float64(value) > 0 ? Float64(value) : 1.0
+    valid(value) && return Float64(value)
+    idx = findfirst(valid, data.ticket_price)
+    if idx === nothing
+        @warn "Aucun prix de billet exploitable, prix de reference force a 1.0"
+        return 1.0
+    end
+    @warn "Prix de reference invalide en premiere ligne, repli sur la premiere annee valide" valeur=value annee=data[idx, "year"] remplacement=data[idx, "ticket_price"]
+    return Float64(data[idx, "ticket_price"])
 end
 
 function _price_index(ticket_price, gdp_per_capita, reference_ticket_price::Float64, reference_gdp::Float64)
