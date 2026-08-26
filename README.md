@@ -6,7 +6,7 @@ Module Julia de prevision du trafic aerien base sur les modeles econometriques K
 
 Le projet vise a porter et fiabiliser les algorithmes Kenza historiquement implementes dans Excel vers Julia, tout en conservant une architecture extensible:
 
-- modeles Kenza classiques, simplifies, indexes et probabilistes;
+- modeles Kenza classiques, simplifies et indexes (variante probabiliste prevue);
 - comparaison numerique avec les sorties Excel;
 - execution en ligne de commande;
 - interface graphique locale;
@@ -22,30 +22,37 @@ julia/
   config/
     model_metadata.json         # Parametres et descriptions des modeles
   data/
-    sample.csv                  # Jeu de donnees exemple
+    sample.csv                  # Jeu de donnees exemple (delimiteur ;)
+    final_dataset*.csv          # Jeux de travail, non utilises par les scripts
   models/
-    abstract_model.jl           # Interface commune des modeles
+    abstract_model.jl           # Interface commune, metriques, continuite
     kenza_models.jl             # Implementations Kenza
     registry.jl                 # Registre des modeles
   services/
     data_service.jl             # Chargement/normalisation des donnees
     forecast_service.jl         # Execution des previsions
-    export_service.jl           # Export des resultats
+    export_service.jl           # Export des resultats (JSON, Excel, PDF)
+  utils/
+    validators.jl               # Controle des donnees d'entree
+    formatters.jl               # Formatage des valeurs et des exports
   run/
+    Project.toml                # Copie de l'environnement (non utilisee)
     test.jl                     # Test des modeles sur sample.csv
     regressions.jl              # Tests de non-regression (bugs corriges)
     validate.jl                 # Validation Julia vs Excel
     gui.jl                      # Interface graphique
+  result/
+    forecast_report*.xlsx       # Exports sauvegardes manuellement
   old/
-    *.csv                       # Donnees de validation extraites d'Excel
-    report.py                   # Rapport Excel avec graphiques natifs
-    comparaison.latex           # Notes/comparaisons techniques
+    kenza_excel_validation_*.csv   # Donnees de validation extraites d'Excel
+    kenza_validation_report.xlsx   # Sortie de report.py
+    report.py                      # Rapport Excel avec graphiques natifs
 ```
 
 ## Prerequis
 
 - Julia 1.10 ou plus recent recommande (teste sous 1.12)
-- Python 3.10+ uniquement pour `old/report.py`
+- Python 3.10+ uniquement pour `old/report.py`, avec `pandas` et `openpyxl`
 - Dependances Julia definies dans `Project.toml`
 
 Installation des dependances Julia:
@@ -56,17 +63,19 @@ julia --project=julia -e "import Pkg; Pkg.instantiate()"
 
 ## Donnees d'entree
 
-Les modeles attendent un CSV contenant au minimum:
+Les modeles attendent un CSV contenant les cinq colonnes suivantes:
 
 ```text
-year, actual_passengers, population, gdp_per_capita
+year, actual_passengers, population, gdp_per_capita, ticket_price
 ```
 
-Certains modeles utilisent aussi:
+Les cinq sont obligatoires, `ticket_price` comprise. Les modeles indexes ne
+l'utilisent pas dans leur formule, mais la projection macro commune
+(`_future_macro`) la lit pour tous, et un fichier sans cette colonne echoue avec
+`ArgumentError: column name :ticket_price not found`.
 
-```text
-ticket_price
-```
+Le delimiteur peut etre `;` ou `,` : `DataService` le detecte a la lecture, et la
+virgule decimale est acceptee.
 
 Exemple disponible:
 
@@ -169,16 +178,27 @@ julia --project=julia julia/run/validate.jl \
   --output path/to/report.csv
 ```
 
-Note: certains exports Excel historiques peuvent avoir un decalage d'un an sur `excel_indexed_forecast`, utilisable ainsi:
+Les deux fichiers d'entree ne sont pas interchangeables et refletent deux bases de
+population differentes:
+
+- `kenza_excel_validation_full_input.csv` sert au modele `kenza` (population de
+  l'origine du flux, ~32 millions);
+- `kenza_excel_validation_input.csv` sert aux quatre autres (population de la
+  destination, ~328 millions).
+
+Note: le fichier `expected` fourni presente un decalage d'un an sur
+`excel_indexed_forecast`. La comparaison le corrige par defaut. Le decalage se
+pilote par la variable d'environnement `INDEXED_YEAR_SHIFT` (valeur par defaut
+`1`); mettre `0` si le CSV de reference est corrige:
 
 ```bash
-julia --project=julia julia/run/validate.jl
+INDEXED_YEAR_SHIFT=0 julia --project=julia julia/run/validate.jl
 ```
 
 Sous PowerShell:
 
 ```powershell
-julia --project=julia julia/run/validate.jl
+$env:INDEXED_YEAR_SHIFT=0; julia --project=julia julia/run/validate.jl
 ```
 
 ## Generer le rapport Excel de validation
@@ -218,7 +238,7 @@ Exemple minimal:
 
 ```julia
 import Pkg
-Pkg.activate(".")
+Pkg.activate("julia")   # et non ".", la racine du depot n'a pas de Project.toml
 
 include("julia/AirTrafficForecaster.jl")
 using .AirTrafficForecaster
@@ -244,7 +264,7 @@ Le portage vise a reproduire les feuilles principales de l'ancien fichier Kenza:
 
 - `Full Kenza` -> `kenza`
 - `Simplified Kenza` -> `kenza_simplifie` et `kenza_simplifie_combine`
-- `Indexed Kenza` -> `kenza_indexed`
+- `Indexed Kenza` -> `kenza_indexed` et `kenza_simplifie_indexe`
 
 La validation numerique est centralisee dans `run/validate.jl`. Les fichiers dans `old/` servent de reference pour comparer les previsions Julia aux sorties Excel.
 
@@ -257,6 +277,12 @@ Pour ajouter un modele:
 3. Ajouter ses parametres dans `config/model_metadata.json`.
 4. L'ajouter aux tests dans `run/test.jl`.
 5. Si necessaire, l'ajouter a la validation dans `run/validate.jl`.
+6. Couvrir son comportement dans `run/regressions.jl`.
+
+Un modele non implemente ne doit pas etre enregistre dans `models/registry.jl`:
+il apparaitrait dans l'interface graphique et dans le classement de `run/test.jl`
+a cote de modeles valides contre Excel. C'est le cas de `kenza_probabilistic`,
+present dans `models/kenza_models.jl` mais volontairement non enregistre.
 
 ## Licence
 
