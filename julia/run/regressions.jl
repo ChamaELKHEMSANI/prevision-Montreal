@@ -12,6 +12,7 @@ Pkg.activate(JULIA_ROOT)
 include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
 
 using DataFrames
+using JSON3
 using Test
 using .AirTrafficForecaster
 
@@ -254,6 +255,37 @@ end
         result = AF.ForecastService.run_forecast("kenza", data, Dict{String,Any}(), 5)
         @test result["metrics"]["R2"] != 0.95
         @test result["metrics"]["RMSE"] != 10.5
+    end
+
+    @testset "L'export JSON survit aux valeurs non finies" begin
+        # JSON n'admet ni NaN ni Infinity : JSON3.write leve sur un tel nombre. Or le code en
+        # produit legitimement (growth_rate sur une prevision nulle, R2 sur variance nulle).
+        # prepare_json_for_export, dont c'est le role, retournait son argument inchange :
+        # to_json echouait donc la ou CSV, Excel, PDF et HTML passaient sans probleme.
+        collapsing = AF.ForecastService.run_forecast(
+            "kenza_simplifie", data, Dict{String,Any}("ticket_price_inflation" => 0.35), 5)
+        @test any(isnan, [row["growth_rate"] for row in collapsing["forecast"]])
+
+        json = AF.ExportService.to_json(collapsing)
+        @test !occursin("NaN", json)
+        @test !occursin("Infinity", json)
+        reparsed = JSON3.read(json)                       # invalide -> leverait ici
+        @test reparsed["forecast"][2]["growth_rate"] === nothing
+
+        # Les quatre autres exports acceptaient deja ces valeurs : ils ne doivent pas regresser.
+        @test length(AF.ExportService.to_csv(collapsing)) > 0
+        @test length(AF.ExportService.to_excel(collapsing)) > 0
+        @test length(AF.ExportService.to_pdf(collapsing)) > 0
+        @test length(AF.ExportService.to_html(collapsing)) > 0
+
+        # missing devient null, et la conversion est recursive.
+        prepared = AF.Formatters.prepare_json_for_export(
+            Dict("a" => Inf, "b" => -Inf, "c" => NaN, "d" => 1.5,
+                 "e" => [NaN, 2.0], "f" => Dict("g" => NaN)))
+        @test prepared["a"] === nothing && prepared["b"] === nothing && prepared["c"] === nothing
+        @test prepared["d"] == 1.5
+        @test prepared["e"] == [nothing, 2.0]
+        @test prepared["f"]["g"] === nothing
     end
 
     @testset "L'export PDF translittere les accents" begin

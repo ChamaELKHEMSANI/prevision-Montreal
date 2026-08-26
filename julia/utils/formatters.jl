@@ -69,8 +69,39 @@ function format_dataframe(df::DataFrame, column_formats::Dict{String,Dict}=Dict(
     return formatted
 end
 
+"""
+    prepare_json_for_export(value)
+
+Rend une structure serialisable en JSON.
+
+Le format JSON n'admet ni NaN ni Infinity : `JSON3.write` refuse d'ecrire un tel nombre et
+leve `NaN not allowed to be written in JSON spec`. Or ces valeurs sont produites
+legitimement — `growth_rate` sur une prevision nulle, `R2` sur une serie de variance nulle —
+et faisaient donc echouer `ExportService.to_json` sur des resultats par ailleurs valides,
+alors que les exports CSV, Excel, PDF et HTML les acceptaient sans broncher.
+
+Cette fonction retournait auparavant son argument inchange, alors que son nom et son unique
+appelant annoncaient cette conversion.
+
+Les nombres non finis deviennent `nothing`, rendu `null` en JSON, comme `missing`. Dates et
+symboles deviennent des chaines. Le parcours est recursif.
+"""
 function prepare_json_for_export(value)
-    return value
+    if value isa AbstractDict
+        return Dict{String,Any}(string(k) => prepare_json_for_export(v) for (k, v) in pairs(value))
+    elseif value isa DataFrame
+        return Any[prepare_json_for_export(Dict(pairs(row))) for row in eachrow(value)]
+    elseif value isa AbstractVector || value isa Tuple
+        return Any[prepare_json_for_export(v) for v in value]
+    elseif value isa AbstractFloat
+        return isfinite(value) ? value : nothing
+    elseif value isa Union{Date,DateTime,Time}
+        return string(value)
+    elseif value isa Symbol
+        return string(value)
+    else
+        return value
+    end
 end
 
 end
