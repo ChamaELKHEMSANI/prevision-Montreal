@@ -286,4 +286,4 @@ present dans `models/kenza_models.jl` mais volontairement non enregistre.
 
 ## Licence
 
-MIT licence.
+MIT. Voir le fichier [LICENSE](LICENSE).
