@@ -864,20 +864,30 @@ function _future_macro(data::DataFrame, horizon::Int, kwargs)
     last_year = data[end, "year"]
     last_pop = data[end, "population"]
     last_gdp = data[end, "gdp_per_capita"]
-    last_price = data[end, "ticket_price"]
-    
-    if !isfinite(Float64(last_price)) || Float64(last_price) <= 0
-        last_price = 1.0
-    end
-    
+
     gdp_growth = _kw(kwargs, :gdp_growth_rate, 0.03)
     pop_growth = _kw(kwargs, :population_growth_rate, 0.01)
     price_inflation = _kw(kwargs, :ticket_price_inflation, 0.02)
-    
+
     pops = last_pop .* (1 .+ pop_growth) .^ (1:horizon)
     gdps = last_gdp .* (1 .+ gdp_growth) .^ (1:horizon)
+
+    # `ticket_price` n'intervient dans la formule d'aucun modele indexe : elle n'est lue ici
+    # que pour renseigner la colonne de sortie du meme nom. Cette lecture inconditionnelle
+    # faisait pourtant echouer `kenza_simplifie_indexe` et `kenza_indexed` sur un fichier
+    # sans prix, alors que ModelRegistry.validate_model_data_requirements les declare — a
+    # juste titre — utilisables sans. On renvoie `missing` plutot qu'une serie fabriquee a
+    # partir d'un prix de reference invente.
+    if !("ticket_price" in names(data))
+        return last_year, pops, gdps, Vector{Union{Missing,Float64}}(missing, horizon)
+    end
+
+    last_price = data[end, "ticket_price"]
+    if ismissing(last_price) || !isfinite(Float64(last_price)) || Float64(last_price) <= 0
+        last_price = 1.0
+    end
     prices = last_price .* (1 .+ price_inflation) .^ (1:horizon)
-    
+
     return last_year, pops, gdps, prices
 end
 

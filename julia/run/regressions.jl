@@ -102,6 +102,34 @@ end
         end
     end
 
+    @testset "Le registre dit la verite sur les colonnes requises" begin
+        # `_future_macro` lisait `ticket_price` sans condition, pour la seule colonne de
+        # sortie du meme nom : les deux modeles indexes echouaient donc sur un fichier sans
+        # prix, alors que le registre les declare — a juste titre — utilisables sans.
+        priceless = DataFrame(year=collect(2000:2019),
+                              actual_passengers=Float64.(1000 .+ 50 .* (1:20)),
+                              population=Float64.(1e6 .+ 1e4 .* (1:20)),
+                              gdp_per_capita=Float64.(3e4 .+ 500 .* (1:20)))
+        for name in AF.ModelRegistry.list_models()
+            announced = AF.ModelRegistry.validate_model_data_requirements(
+                name, names(priceless))["is_compatible"]
+            works = try
+                model = AF.ModelRegistry.get_model(name)()
+                Abstract.fit!(model, priceless)
+                Abstract.predict(model, 3)
+                true
+            catch
+                false
+            end
+            @test announced == works
+        end
+        # Sans prix en entree, la colonne de sortie est `missing` : aucune serie de prix
+        # n'est fabriquee a partir d'une valeur de reference inventee.
+        model = Models.KenzaIndexedModel()
+        Abstract.fit!(model, priceless)
+        @test all(ismissing, Abstract.predict(model, 3).ticket_price)
+    end
+
     @testset "Le validateur signale les valeurs manquantes sans planter" begin
         # `count(col .< 0)` levait un TypeError des qu'une valeur etait `missing`.
         bad = DataFrame(year=[2000, 2001, 2002], actual_passengers=[100.0, missing, -5.0])
