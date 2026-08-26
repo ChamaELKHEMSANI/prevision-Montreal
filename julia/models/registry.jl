@@ -141,10 +141,10 @@ function validate_model_data_requirements(model_name::String, columns::Vector{St
         "kenza_probabilistic" => ["actual_passengers", "gdp_per_capita", "population", "ticket_price"]
      )
     req = get(required, model_name, ["actual_passengers"])
-    missing = setdiff(req, columns)
-    score = length(req) == 0 ? 0 : (length(req) - length(missing)) / length(req) * 100
-    return Dict("required_columns"=>req, "missing_columns"=>missing,
-                "compatibility_score"=>score, "is_compatible"=>isempty(missing))
+    missing_columns = setdiff(req, columns)
+    score = length(req) == 0 ? 0 : (length(req) - length(missing_columns)) / length(req) * 100
+    return Dict("required_columns"=>req, "missing_columns"=>missing_columns,
+                "compatibility_score"=>score, "is_compatible"=>isempty(missing_columns))
 end
 
 function get_model_capabilities(model_name::String)::Dict{String,Any}

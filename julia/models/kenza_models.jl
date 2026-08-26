@@ -1,7 +1,8 @@
 module KenzaModels
 using DataFrames, Statistics, LinearAlgebra, Random
 using ..AbstractModel
-using ..AbstractModel: AbstractForecastingModel, calculate_metrics, apply_forecast_continuity
+using ..AbstractModel: AbstractForecastingModel, calculate_metrics, apply_forecast_continuity,
+                       rolling_backtest_metrics, growth_rate
 using Optim
 
 # Base for Kenza variants
@@ -134,7 +135,8 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
         actual = data.actual_passengers
         
         # Définition de la fonction objectif
-        loss(params) = _kenza_loss(params, rho_t, pop, actual, a, b)
+        penetration = Float64(model.parameters["full_penetration"])
+        loss(params) = _kenza_loss(params, rho_t, pop, actual, a, b, penetration)
         
         # Excel maps k1/k2 to the c/d coefficients of the Kenza curve.
         lower = [-20.0, 0.01]
@@ -155,13 +157,7 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     pred = model.parameters["full_penetration"] .* data.population .* F
     
     # Facteur de continuité
-    model.continuity_adjustment_factor = 1.0
-    n_years = max(3, Int(floor(length(pred) * 0.2)))
-    recent_actual = data.actual_passengers[end-n_years+1:end]
-    recent_pred = pred[end-n_years+1:end]
-    if sum(recent_pred) > 0
-        model.continuity_adjustment_factor = sum(recent_actual) / sum(recent_pred)
-    end
+    model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
     
     adjusted = pred .* model.continuity_adjustment_factor
     model.metrics = calculate_metrics(data.actual_passengers, adjusted)
@@ -234,7 +230,7 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
         df = apply_forecast_continuity(df, model.train_data)
     end
     
-    df.growth_rate = [0.0; (diff(df.predicted_passengers) ./ df.predicted_passengers[1:end-1]) .* 100]
+    df.growth_rate = growth_rate(df.predicted_passengers)
     return df
 end
 
@@ -290,9 +286,11 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     
     dn = data.actual_passengers ./ max.(data.population, 1e-8)
     
-    if haskey(model.parameters, "C1") && haskey(model.parameters, "C2")
-        # Paramètres déjà passés via kwargs
-    elseif model.parameters["optimize_parameters"]
+    # "C1"/"C2" sont toujours poses par le constructeur : le test `haskey` etait donc toujours
+    # vrai et la regression n'etait jamais atteinte. `optimize_parameters=true` etait
+    # silencieusement sans effet et le modele tournait en permanence sur les valeurs de
+    # remplissage C1=-0.5 / C2=0.5 (R2 = -7.56 sur data/sample.csv).
+    if model.parameters["optimize_parameters"]
         X = hcat(pn, ones(length(pn)))
         coef = X \ dn
         model.parameters["C1"] = coef[1]
@@ -336,17 +334,26 @@ function AbstractModel.predict(model::KenzaSimplifieModel, horizon::Int; kwargs.
     pn = (prices ./ gdps) .* (ref_gdp / ref_price)
     pn = clamp.(pn, 0.2, 3.0)
     
+    # Le facteur issu de fit! est le RECALAGE du modele, partie integrante de la calibration
+    # Excel des variantes simplifiees (le desactiver fait passer l'ecart Julia/Excel de ~5 %
+    # a ~53 % de MAPE). Il reste donc toujours applique ici. `apply_continuity_adjustment`
+    # ne pilote que la correction de SAUT entre historique et prevision, qu'Excel ne fait pas
+    # et que run/validate.jl desactive explicitement.
+    apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
     C1 = model.parameters["C1"]; C2 = model.parameters["C2"]
     pred_dn = max.(0.0, C1 .* pn .+ C2)
     pred = pred_dn .* pops .* model.continuity_adjustment_factor
-    
+
     lower = pred .* 0.8
     upper = pred .* 1.2
-    
+
     df = DataFrame(year=future_years, population=pops, gdp_per_capita=gdps,
                    ticket_price=prices, predicted_passengers=pred,
                    predicted_passengers_lower=lower, predicted_passengers_upper=upper)
-    df.growth_rate = [0.0; (diff(df.predicted_passengers) ./ df.predicted_passengers[1:end-1]) .* 100]
+    if apply_continuity
+        df = apply_forecast_continuity(df, model.train_data)
+    end
+    df.growth_rate = growth_rate(df.predicted_passengers)
     return df
 end
 
@@ -458,7 +465,10 @@ function KenzaProbabilisticModel(; name="kenza_probabilistic",
         "distribution_a" => 1.1572,
         "distribution_b" => 4.3517429,
         "optimize_parameters" => false,
-        "monte_carlo_simulations" => n_simulations
+        "monte_carlo_simulations" => n_simulations,
+        # Sans graine, deux executions identiques renvoyaient des previsions differentes
+        # (le tirage des residus alimente directement predicted_passengers). 0 = pas de graine.
+        "random_seed" => 42
     )
     return KenzaProbabilisticModel(name, description, params, false, nothing, Dict(),
                                    n_simulations, bootstrap_type, nothing, nothing, nothing, 1.0)
@@ -477,11 +487,23 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     reference_gdp_per_cap = data[1, "gdp_per_capita"]
     reference_ticket_price = data[1, "ticket_price"]
     
+    seed = Int(model.parameters["random_seed"])
+    seed != 0 && Random.seed!(seed)
+
     n_sim = model.n_simulations
     k1_samples = Float64[]
     k2_samples = Float64[]
-    
-    for b in 1:n_sim
+
+    # Sans optimisation, chacune des n_sim iterations rejouait le meme calcul et empilait
+    # des k1/k2 IDENTIQUES (ecart-type nul) : 1000 reechantillonnages pour un resultat
+    # constant. On court-circuite la boucle ; l'incertitude vient alors des residus seuls,
+    # ce que `param_bootstrap` signale explicitement.
+    if !model.parameters["optimize_parameters"]
+        k1_samples = fill(Float64(model.parameters["k1"]), n_sim)
+        k2_samples = fill(Float64(model.parameters["k2"]), n_sim)
+    end
+
+    for b in (isempty(k1_samples) ? (1:n_sim) : (1:0))
         idx = rand(1:nrow(data), nrow(data))
         boot_data = data[idx, :]
         
@@ -523,6 +545,8 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
         "k2_std" => std(k2_samples)
     )
     
+    model.param_distribution["param_bootstrap"] = model.parameters["optimize_parameters"]
+
     model.parameters["k1"] = mean(k1_samples)
     model.parameters["k2"] = mean(k2_samples)
     
@@ -532,14 +556,8 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
                             model.parameters["k1"], model.parameters["k2"])
     pred = data.population .* F
     
-    model.continuity_adjustment_factor = 1.0
-    n_years = max(3, Int(floor(length(pred) * 0.2)))
-    recent_actual = data.actual_passengers[end-n_years+1:end]
-    recent_pred = pred[end-n_years+1:end]
-    if sum(recent_pred) > 0
-        model.continuity_adjustment_factor = sum(recent_actual) / sum(recent_pred)
-    end
-    
+    model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
+
     adjusted = pred .* model.continuity_adjustment_factor
     residuals = Float64.(data.actual_passengers .- adjusted)
     residuals .-= mean(residuals)
@@ -580,8 +598,11 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
     T_t = prices ./ reference_ticket_price
     rho_t = _normalized_price(T_t, gdps, reference_gdp_per_cap)
     
+    seed = Int(get(model.parameters, "random_seed", 0))
+    seed != 0 && Random.seed!(seed)
+
     all_preds = Matrix{Float64}(undef, n_sim, horizon)
-    
+
     for b in 1:n_sim
         k1 = k1_samples[b]
         k2 = k2_samples[b]
@@ -624,11 +645,7 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
         "upper_75" => upper_75
     )
     
-    if horizon > 1
-        df.growth_rate = [0.0; (diff(df.predicted_passengers) ./ df.predicted_passengers[1:end-1]) .* 100]
-    else
-        df.growth_rate = zeros(horizon)
-    end
+    df.growth_rate = growth_rate(df.predicted_passengers)
     
     return df
 end
@@ -675,9 +692,16 @@ end
 function AbstractModel.predict(model::KenzaSimplifieIndexeModel, horizon::Int; kwargs...)::DataFrame
     _ensure_fitted(model)
     last_year, pops, gdps, prices = _future_macro(model.train_data, horizon, kwargs)
+    # Le facteur issu de fit! est le RECALAGE du modele, partie integrante de la calibration
+    # Excel des variantes simplifiees (le desactiver fait passer l'ecart Julia/Excel de ~5 %
+    # a ~53 % de MAPE). Il reste donc toujours applique ici. `apply_continuity_adjustment`
+    # ne pilote que la correction de SAUT entre historique et prevision, qu'Excel ne fait pas
+    # et que run/validate.jl desactive explicitement.
+    apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
     pn = model.reference_gdp_per_cap ./ max.(gdps, 1e-10)
     pred = max.(0, model.parameters["C1"] .* pn .+ model.parameters["C2"]) .* pops .* model.continuity_adjustment_factor
-    return _forecast_df(last_year, pops, gdps, prices, pred)
+    return _forecast_df(last_year, pops, gdps, prices, pred;
+                        training_df=model.train_data, apply_continuity=apply_continuity)
 end
 
 function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...)::Bool
@@ -718,8 +742,27 @@ function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...
 
     pred_hist = k1 .* _kenza_distribution(k2 .* T .* S, a, b, c, d) .* data.population
     model.continuity_adjustment_factor = 1.0
-    model.metrics = calculate_metrics(data.actual_passengers, pred_hist)
     model.is_fitted = true
+
+    # `T` est reconstruit en inversant analytiquement la distribution a partir du trafic
+    # OBSERVE ; le reappliquer redonne exactement les donnees d'entree. Les metriques dans
+    # l'echantillon valent donc mecaniquement R2 = 1 / RMSE = 0 et ne mesurent aucun pouvoir
+    # predictif : run/test.jl classait ce modele premier pour cette seule raison.
+    # On publie donc des metriques de validation glissante hors echantillon, en conservant
+    # les valeurs in-sample sous des cles `in_sample_*` a titre de controle de calage.
+    in_sample = calculate_metrics(data.actual_passengers, pred_hist)
+    metrics = Dict{String,Float64}("in_sample_" * k => v for (k, v) in in_sample)
+    if _kw(kwargs, :compute_backtest, true)
+        backtest = rolling_backtest_metrics(KenzaIndexedModel, data;
+                                            params=Dict{String,Any}("compute_backtest" => false))
+        merge!(metrics, backtest)
+        for key in ("MAE", "MSE", "RMSE", "MAPE", "R2")
+            value = get(backtest, "oos_" * key, NaN)
+            metrics[key] = value
+            metrics[lowercase(key)] = value
+        end
+    end
+    model.metrics = metrics
     return true
 end
 
@@ -739,7 +782,9 @@ function AbstractModel.predict(model::KenzaIndexedModel, horizon::Int; kwargs...
     F = _kenza_distribution(model.calibration_k2 .* t_future .* s_future, a, b, c, d)
     pred = model.calibration_k1 .* pops .* F
 
-    return _forecast_df(last_year, pops, gdps, prices, pred)
+    return _forecast_df(last_year, pops, gdps, prices, pred;
+                        training_df=model.train_data,
+                        apply_continuity=_kw(kwargs, :apply_continuity_adjustment, true))
 end
 
 
@@ -780,9 +825,16 @@ function AbstractModel.predict(model::KenzaSimplifieCombineModel, horizon::Int; 
     elasticity_dn = model.elasticity_coef[1] .* pn .+ model.elasticity_coef[2]
     w = clamp(Float64(model.parameters["trend_weight"]), 0.0, 1.0)
     pred_dn = max.(0.0, w .* trend_dn .+ (1.0 - w) .* elasticity_dn)
+    # Le facteur issu de fit! est le RECALAGE du modele, partie integrante de la calibration
+    # Excel des variantes simplifiees (le desactiver fait passer l'ecart Julia/Excel de ~5 %
+    # a ~53 % de MAPE). Il reste donc toujours applique ici. `apply_continuity_adjustment`
+    # ne pilote que la correction de SAUT entre historique et prevision, qu'Excel ne fait pas
+    # et que run/validate.jl desactive explicitement.
+    apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
     pred = pred_dn .* pops .* model.continuity_adjustment_factor
-    
-    return _forecast_df(last_year, pops, gdps, prices, pred)
+
+    return _forecast_df(last_year, pops, gdps, prices, pred;
+                        training_df=model.train_data, apply_continuity=apply_continuity)
 end
 
 function _update_params!(parameters::Dict{String,Any}, kwargs)
@@ -829,15 +881,41 @@ function _future_macro(data::DataFrame, horizon::Int, kwargs)
     return last_year, pops, gdps, prices
 end
 
-function _forecast_df(last_year, pops, gdps, prices, pred)
+# `training_df` est optionnel : lorsqu'il est fourni et que `apply_continuity` est vrai, la
+# correction de continuite est appliquee ici, comme dans KenzaModel.predict. Auparavant les
+# modeles passant par ce constructeur (simplifie indexe, combine, indexed) ignoraient
+# totalement le kwarg `apply_continuity_adjustment`.
+function _forecast_df(last_year, pops, gdps, prices, pred;
+                      training_df=nothing, apply_continuity::Bool=false)
     future_years = collect(last_year+1:last_year+length(pred))
     lower = max.(0, pred .* 0.8)
     upper = pred .* 1.2
     
     df = DataFrame(year=future_years, population=pops, gdp_per_capita=gdps, ticket_price=prices,
                    predicted_passengers=pred, predicted_passengers_lower=lower, predicted_passengers_upper=upper)
-    df.growth_rate = length(pred) <= 1 ? zeros(length(pred)) : [0.0; (diff(df.predicted_passengers) ./ max.(df.predicted_passengers[1:end-1], 1.0)) .* 100]
+    if apply_continuity && training_df !== nothing
+        df = apply_forecast_continuity(df, training_df)
+    end
+    df.growth_rate = growth_rate(df.predicted_passengers)
     return df
+end
+
+"""
+    _recent_continuity_factor(actual, pred) -> Float64
+
+Recale le modele sur les dernieres annees observees (20 % de l'echantillon, au moins 3 ans).
+
+La fenetre est bornee par `length(pred)` : `max(3, ...)` seul provoquait un `BoundsError`
+des que l'echantillon comptait moins de 3 lignes.
+"""
+function _recent_continuity_factor(actual, pred)::Float64
+    n = length(pred)
+    n == 0 && return 1.0
+    n_years = clamp(max(3, Int(floor(n * 0.2))), 1, n)
+    recent_actual = actual[end - n_years + 1:end]
+    recent_pred = pred[end - n_years + 1:end]
+    total = sum(recent_pred)
+    return total > 0 ? sum(recent_actual) / total : 1.0
 end
 
 # UNE SEULE DÉFINITION - Version avec poids croissants (plus proche d'Excel)
@@ -863,10 +941,14 @@ end
 
 _proxy_or_ticket_price(model, data::DataFrame) = data.ticket_price
 
-function _kenza_loss(params, rho, pop, actual, a, b)
+# `penetration` doit refleter exactement ce que predit le modele. Sans lui, l'optimiseur
+# minimisait la SSE de `pop .* F` alors que KenzaModel predit `full_penetration .* pop .* F`
+# (SSE 1.5x differente sur data/sample.csv) : les k1/k2 retenus n'etaient donc pas optimaux
+# pour le modele reellement utilise.
+function _kenza_loss(params, rho, pop, actual, a, b, penetration::Real=1.0)
     k1, k2 = params[1], params[2]
     F = _kenza_distribution(rho, a, b, k1, k2)
-    pred = pop .* F
+    pred = Float64(penetration) .* pop .* F
     return sum((actual .- pred).^2)
 end
 

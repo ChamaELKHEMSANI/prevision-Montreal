@@ -7,6 +7,24 @@ function validate(data)
     return validate_data(DataValidator(), data)
 end
 
+"""
+    coerce_schema!(df) -> DataFrame
+
+Ramene `year` a un entier lorsque c'est possible sans perte.
+
+Cette conversion etait auparavant un effet de bord de `Validators.validate`, qui mutait le
+DataFrame de l'appelant. Elle est desormais explicite et appelee au chargement.
+"""
+function coerce_schema!(df::DataFrame)
+    "year" in names(df) || return df
+    nonmissingtype(eltype(df.year)) <: Integer && return df
+    values = df.year
+    any(ismissing, values) && return df
+    all(v -> v isa Number && isfinite(v) && v == floor(v), values) || return df
+    df.year = Int.(values)
+    return df
+end
+
 function process_uploaded_file(filepath::String)
     @info "Processing uploaded file" filepath
     df = if endswith(lowercase(filepath), ".csv")
@@ -17,18 +35,21 @@ function process_uploaded_file(filepath::String)
         error("Unsupported file type: $(splitext(filepath)[2])")
     end
     
-    df = normalize_column_names(df)
-    
+    df = coerce_schema!(normalize_column_names(df))
+
     validation = validate(df)
     summary = generate_summary(df)
-    
-    first_rows = _records(first(df, min(100, nrow(df))))
+
     return Dict(
         "filename" => basename(filepath),
         "records" => nrow(df),
         "columns" => names(df),
         "validation" => validation,
-        "data" => first_rows,
+        # "data" est un APERCU destine a l'affichage, limite a 100 lignes. Les consommateurs
+        # qui ont besoin du jeu complet doivent lire "dataframe" : la GUI construisait son
+        # jeu d'entrainement a partir de "data" et tronquait donc silencieusement a 100 ans.
+        "data" => _records(first(df, min(100, nrow(df)))),
+        "dataframe" => df,
         "summary" => summary
     )
 end
@@ -107,7 +128,7 @@ function normalize_column_names(df::DataFrame)
     return df
 end
 
-function clean_data(df::DataFrame)
+function clean_data(df::DataFrame; protected=("year", "actual_passengers"))
     cleaned = copy(df)
     
     for col in names(cleaned)
@@ -127,8 +148,12 @@ function clean_data(df::DataFrame)
     end
     
     unique!(cleaned)
-    
+
+    # `year` et `actual_passengers` etaient ecretes comme les autres colonnes : un ecretage
+    # a 1.5*IQR sur la variable a expliquer efface les chocs reels (2009, 2020) que le
+    # modele doit precisement reproduire, et deforme l'axe temporel.
     for col in names(cleaned)
+        col in protected && continue
         if eltype(cleaned[!, col]) <: Number
             d = collect(skipmissing(cleaned[!, col]))
             if length(d) >= 4
@@ -166,6 +191,10 @@ function _read_csv_bytes(content::Vector{UInt8})
             else
                 number = tryparse(Float64, replace(stripped, "," => "."))
                 if number === nothing
+                    # Une seule cellule non numerique bascule TOUTE la colonne en texte, ce
+                    # qui la rend inutilisable par les modeles. Le silence rendait le
+                    # diagnostic impossible : on nomme la colonne et la valeur fautive.
+                    numeric && @warn "Colonne traitee comme texte : valeur non numerique" colonne=header valeur=stripped
                     numeric = false
                     push!(parsed, stripped)
                 else
@@ -194,16 +223,17 @@ function process_uploaded_bytes(filename::String, content::Vector{UInt8})
     else
         error("Unsupported file type: $ext")
     end
-    df = normalize_column_names(df)
+    df = coerce_schema!(normalize_column_names(df))
     validation = validate(df)
     summary = generate_summary(df)
-    first_rows = _records(first(df, min(100, nrow(df))))
     return Dict(
         "filename" => filename,
         "records" => nrow(df),
         "columns" => names(df),
         "validation" => validation,
-        "data" => first_rows,
+        # Voir process_uploaded_file : "data" est un apercu tronque, "dataframe" le jeu complet.
+        "data" => _records(first(df, min(100, nrow(df)))),
+        "dataframe" => df,
         "summary" => summary,
         "success"=>  true
     )

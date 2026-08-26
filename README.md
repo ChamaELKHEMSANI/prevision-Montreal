@@ -33,6 +33,7 @@ julia/
     export_service.jl           # Export des resultats
   run/
     test.jl                     # Test des modeles sur sample.csv
+    regressions.jl              # Tests de non-regression (bugs corriges)
     validate.jl                 # Validation Julia vs Excel
     gui.jl                      # Interface graphique
   old/
@@ -43,7 +44,7 @@ julia/
 
 ## Prerequis
 
-- Julia 1.10 ou plus recent recommande
+- Julia 1.10 ou plus recent recommande (teste sous 1.12)
 - Python 3.10+ uniquement pour `old/report.py`
 - Dependances Julia definies dans `Project.toml`
 
@@ -107,6 +108,32 @@ Ce script charge `data/sample.csv`, execute les modeles Kenza et affiche les met
 - R2
 - MAPE
 - largeur moyenne des intervalles de prevision
+
+La suite de non-regression couvre les bugs corriges (colonne de prevision unique,
+`optimize_parameters`, metriques hors echantillon, validateur, reproductibilite):
+
+```bash
+julia --project=julia julia/run/regressions.jl
+```
+
+### Lire les metriques
+
+Pour `kenza_indexed`, l'ajustement reconstruit l'indice de prix implicite en inversant
+analytiquement la distribution a partir du trafic observe : le reappliquer redonne
+exactement les donnees d'entree. Ses metriques dans l'echantillon valent donc
+mecaniquement R2 = 1 et RMSE = 0 sans mesurer aucun pouvoir predictif. Le modele publie
+pour cette raison des metriques de validation glissante hors echantillon (`R2`, `RMSE`,
+... issues des cles `oos_*`), les valeurs in-sample restant accessibles sous
+`in_sample_*` a titre de controle de calage.
+
+### Colonnes de prevision
+
+`predicted_passengers` porte toujours la prevision **finale**, correction de continuite
+comprise : c'est la colonne que tracent l'interface et qu'exportent les rapports.
+`predicted_passengers_raw` conserve la valeur d'avant correction, a des fins de
+diagnostic uniquement. Passer `apply_continuity_adjustment => false` desactive la
+correction de saut entre historique et prevision (ce que fait `run/validate.jl`, Excel
+ne l'appliquant pas).
 
 ## Validation contre Excel
 

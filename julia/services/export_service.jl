@@ -201,7 +201,34 @@ function _pdf_escape(text)
     return replace(string(text), "\\"=>"\\\\", "("=>"\\(", ")"=>"\\)")
 end
 
-_pdf_ascii(text) = replace(string(text), r"[^\x20-\x7e]" => "")
+# Les polices PDF de base (Helvetica, WinAnsi) ne couvrent pas l'UTF-8 : le contenu doit
+# etre ramene en ASCII. La version precedente SUPPRIMAIT les caracteres accentues
+# ("prevision" devenait "prvision"). On translittere avant de filtrer le residu.
+# La ponctuation typographique n'a pas d'equivalent par decomposition Unicode : sans cette
+# table, un tiret cadratin ou une apostrophe courbe disparaitrait purement et simplement.
+const _PDF_TRANSLIT = Dict(
+    '\u2013'=>"-", '\u2014'=>"-", '\u2018'=>"'", '\u2019'=>"'",
+    '\u201c'=>"\"", '\u201d'=>"\"", '\u2026'=>"...", '\u00a0'=>" ",
+    '\u20ac'=>"EUR", '\u00b0'=>"deg", '\u00e6'=>"ae", '\u0153'=>"oe", '\u00df'=>"ss",
+    '\u00ab'=>"\"", '\u00bb'=>"\"", '\u2192'=>"->", '\u00d7'=>"x", '\u00b1'=>"+/-",
+)
+
+function _pdf_ascii(text)
+    out = IOBuffer()
+    for char in string(text)
+        if isascii(char)
+            print(out, char)
+            continue
+        end
+        if haskey(_PDF_TRANSLIT, char)
+            print(out, _PDF_TRANSLIT[char])
+            continue
+        end
+        folded = Base.Unicode.normalize(string(char), stripmark=true)
+        print(out, replace(folded, r"[^\x20-\x7e]" => ""))
+    end
+    return String(take!(out))
+end
 
 function _pdf_text!(ops::Vector{String}, x, y, text; size=10, bold=false, color="0 0 0")
     font = bold ? "F2" : "F1"
@@ -546,13 +573,16 @@ function _forecast_table_page(results)
     end
     rows = [[
         _dict_get(row, "year", ""),
-        _pdf_number(_dict_get(row, "predicted_passengers_raw", _dict_get(row, "predicted_passengers", nothing))),
-        _pdf_number(_dict_get(row, "predicted_passengers_adjusted", nothing)),
+        _pdf_number(_dict_get(row, "predicted_passengers_raw", nothing)),
+        # `predicted_passengers` porte desormais la prevision finale (continuite comprise) ;
+        # l'ancienne colonne `predicted_passengers_adjusted` la dupliquait et divergeait du
+        # graphique de la GUI, qui tracait `predicted_passengers`.
+        _pdf_number(_dict_get(row, "predicted_passengers", nothing)),
         _pdf_number(_dict_get(row, "predicted_passengers_lower", nothing)),
         _pdf_number(_dict_get(row, "predicted_passengers_upper", nothing)),
         _pdf_number(_dict_get(row, "growth_rate", nothing); decimals=2)
     ] for row in forecast[1:min(end, 20)]]
-    _pdf_table!(ops, 28, 720, ["Annee", "Brut", "Ajuste", "Basse", "Haute", "Croissance %"], rows, [58, 96, 96, 96, 96, 94]; size=7)
+    _pdf_table!(ops, 28, 720, ["Annee", "Brut", "Prevision", "Basse", "Haute", "Croissance %"], rows, [58, 96, 96, 96, 96, 94]; size=7)
     return join(ops, "\n")
 end
 

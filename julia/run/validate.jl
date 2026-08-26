@@ -171,11 +171,15 @@ function main()
         "ref_elasticity" => param_value(params_table, "Indexed Kenza", "simplified_elasticity"),
         "fare_growth_rate" => 0.0,
         "optimize_parameters" => false,
+        # Excel n'ancre pas la premiere prevision sur la derniere observation :
+        # la comparaison doit desactiver la correction de saut pour TOUS les modeles.
+        "apply_continuity_adjustment" => false,
     )
 
     simplified_combine_params = Dict{String,Any}(
         "trend_weight" => 0.5,
         "optimize_parameters" => true,
+        "apply_continuity_adjustment" => false,
     )
 
     model_specs = [

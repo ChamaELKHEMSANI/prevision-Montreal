@@ -85,10 +85,35 @@ function plot_comparison(results, data, model_names)
     return p
 end
 
-function align_forecast_years!(result, last_input_year::Int)
+"""
+    align_forecast_years!(result, last_training_year)
+
+Recale les annees de prevision sur la derniere annee REELLEMENT utilisee a l'entrainement.
+
+La version precedente recevait la derniere annee du fichier complet et ecrasait
+inconditionnellement `row["year"]` : des que l'utilisateur restreignait la fenetre
+d'entrainement, la prevision etait etiquetee avec des annees posterieures a celles pour
+lesquelles elle avait ete calculee, et le graphique se decalait d'autant.
+
+On ne renumerote donc que si les annees produites par le modele sont absentes ou
+incoherentes, et on part de l'annee de fin d'entrainement.
+"""
+function align_forecast_years!(result, last_training_year::Int)
     forecast = get(result, "forecast", Any[])
+    isempty(forecast) && return result
+    years = [get(row, "year", nothing) for row in forecast]
+    if all(y -> y isa Number && isfinite(y), years)
+        expected = [last_training_year + i for i in 1:length(forecast)]
+        if Int.(round.(Float64.(years))) == expected
+            for (row, year) in zip(forecast, expected)
+                row["year"] = year
+            end
+            return result
+        end
+    end
+    @warn "Annees de prevision incoherentes, renumerotation" depuis=last_training_year
     for (i, row) in enumerate(forecast)
-        row["year"] = last_input_year + i
+        row["year"] = last_training_year + i
     end
     return result
 end
@@ -124,8 +149,12 @@ function load_data(filepath::String)
     if !get(response, "success", false)
         error(get(response, "error", "Failed to load data"))
     end
-    data = get(response, "data", Any[])
-    df = DataFrame(data)
+    # `response["data"]` est un APERCU limite a 100 lignes destine a l'affichage : le
+    # construire en jeu d'entrainement tronquait silencieusement toute serie plus longue.
+    df = get(response, "dataframe", nothing)
+    if !(df isa DataFrame)
+        df = DataFrame(get(response, "data", Any[]))
+    end
     if !("year" in names(df)) || !("actual_passengers" in names(df))
         error("Data must contain 'year' and 'actual_passengers'")
     end
@@ -574,19 +603,11 @@ function build_gui()
   
         save_current_parameters!()
         params = single_parameters[model_name]
-        try
-            nothing
-        catch
-            set_gtk_property!(lbl_status, :label, "Erreur : paramètres JSON invalides")
-            return
-        end
-
         set_gtk_property!(lbl_status, :label, "Exécution de $model_name...")
         try
             training_data, start_year, end_year = selected_training_data()
             result = ForecastService.run_forecast(model_name, training_data, params, horizon)
-            last_input_year = Int(round(maximum(skipmissing(app.data.year))))
-            align_forecast_years!(result, last_input_year)
+            align_forecast_years!(result, Int(round(maximum(skipmissing(training_data.year)))))
             app.results["single"] = result
             metrics = get(result, "metrics", Dict{String,Any}())
             metrics_str = "Modèle : $model_name\nPériode d'entraînement : $start_year - $end_year ($(nrow(training_data)) lignes)\nHorizon : $horizon\n"
@@ -630,22 +651,15 @@ function build_gui()
         end
         horizon = Int(ceil(get_gtk_property(spin_horizon, :value, Float64)))
         save_current_parameters!()
-        try
-            nothing
-        catch
-            set_gtk_property!(lbl_status, :label, "Erreur : paramètres JSON invalides")
-            return
-        end
-
         set_gtk_property!(lbl_status, :label, "Comparaison en cours...")
         try
             training_data, start_year, end_year = selected_training_data()
-            last_input_year = Int(round(maximum(skipmissing(app.data.year))))
+            last_training_year = Int(round(maximum(skipmissing(training_data.year))))
             results = Dict{String,Any}()
             for m in model_names
                 params = get(comparison_parameters, m, Registry.get_default_params(m))
                 res = ForecastService.run_forecast(m, training_data, params, horizon)
-                align_forecast_years!(res, last_input_year)
+                align_forecast_years!(res, last_training_year)
                 results[m] = res
             end
             app.results["comparison"] = results

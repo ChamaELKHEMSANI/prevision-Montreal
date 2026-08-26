@@ -18,11 +18,20 @@ function validate(model::AbstractForecastingModel, validation_data::DataFrame)::
     error("validate not implemented for $(typeof(model))")
 end
 
+# MAPE n'est definie que pour les observations non nulles : un epsilon au denominateur
+# ne "protege" pas la division, il fabrique une valeur arbitraire. On ecarte donc les
+# observations nulles et on renvoie NaN si aucune n'est exploitable.
+function _mape(actual::Vector{Float64}, errors::Vector{Float64})::Float64
+    usable = abs.(actual) .> 0
+    any(usable) || return NaN
+    return mean(abs.(errors[usable] ./ actual[usable])) * 100
+end
+
 function calculate_metrics(actual::AbstractVector, predicted::AbstractVector)::Dict{String,Float64}
     n = min(length(actual), length(predicted))
     if n == 0
-        return Dict("MAE"=>0.0, "MSE"=>0.0, "RMSE"=>0.0, "MAPE"=>0.0, "R2"=>0.0,
-                    "mae"=>0.0, "mse"=>0.0, "rmse"=>0.0, "mape"=>0.0, "r2"=>0.0)
+        return Dict("MAE"=>NaN, "MSE"=>NaN, "RMSE"=>NaN, "MAPE"=>NaN, "R2"=>NaN,
+                    "mae"=>NaN, "mse"=>NaN, "rmse"=>NaN, "mape"=>NaN, "r2"=>NaN)
     end
     actual = Float64.(actual[1:n])
     predicted = Float64.(predicted[1:n])
@@ -30,11 +39,56 @@ function calculate_metrics(actual::AbstractVector, predicted::AbstractVector)::D
     mae = mean(abs.(errors))
     mse = mean(errors.^2)
     rmse = sqrt(mse)
-    mape = mean(abs.(errors ./ (actual .+ 1e-10))) * 100
+    mape = _mape(actual, errors)
     denominator = sum((actual .- mean(actual)).^2)
-    r2 = denominator == 0 ? 0.0 : 1 - sum(errors.^2) / denominator
+    # Une variance nulle rend le R2 indefini : NaN est honnete, 0.0 se confond avec
+    # "le modele fait aussi bien que la moyenne".
+    r2 = denominator == 0 ? NaN : 1 - sum(errors.^2) / denominator
     return Dict("MAE"=>mae, "MSE"=>mse, "RMSE"=>rmse, "MAPE"=>mape, "R2"=>r2,
                 "mae"=>mae, "mse"=>mse, "rmse"=>rmse, "mape"=>mape, "r2"=>r2)
+end
+
+"""
+    rolling_backtest_metrics(model_factory, data; min_train, params) -> Dict{String,Float64}
+
+Validation glissante a un pas : pour chaque annee t au-dela de `min_train`, ajuste un
+modele neuf sur `data[1:t-1]`, predit un pas et compare a l'observation reelle.
+
+Necessaire pour les modeles dont l'ajustement est une inversion analytique des donnees
+observees (`KenzaIndexedModel`) : leurs metriques dans l'echantillon valent
+mecaniquement R2 = 1 / RMSE = 0 et ne mesurent aucun pouvoir predictif.
+
+Les cles sont prefixees `oos_` (out-of-sample) pour ne jamais etre confondues avec les
+metriques dans l'echantillon.
+"""
+function rolling_backtest_metrics(model_factory, data::DataFrame;
+                                  min_train::Int=10, params::Dict{String,Any}=Dict{String,Any}())
+    n = nrow(data)
+    start = max(min_train, 3)
+    if n <= start
+        return Dict{String,Float64}()
+    end
+    actuals = Float64[]
+    preds = Float64[]
+    for t in (start + 1):n
+        try
+            m = model_factory()
+            fit!(m, data[1:(t - 1), :]; (Symbol(k) => v for (k, v) in params)...)
+            forecast = predict(m, 1)
+            nrow(forecast) == 0 && continue
+            push!(preds, Float64(forecast.predicted_passengers[1]))
+            push!(actuals, Float64(data[t, "actual_passengers"]))
+        catch err
+            @debug "Backtest fold ignore" year=data[t, "year"] exception=err
+        end
+    end
+    isempty(preds) && return Dict{String,Float64}()
+    metrics = calculate_metrics(actuals, preds)
+    out = Dict{String,Float64}("oos_folds" => Float64(length(preds)))
+    for key in ("MAE", "MSE", "RMSE", "MAPE", "R2")
+        out["oos_" * key] = metrics[key]
+    end
+    return out
 end
 
 function get_model_info(model::AbstractForecastingModel)::Dict{String,Any}
@@ -43,6 +97,20 @@ function get_model_info(model::AbstractForecastingModel)::Dict{String,Any}
 end
 
 
+"""
+    apply_forecast_continuity(forecast_df, training_df) -> DataFrame
+
+Supprime le saut entre la derniere observation historique et la premiere valeur predite.
+
+`predicted_passengers` (ainsi que les bornes) contient toujours la prevision **finale**,
+celle que tracent l'interface et qu'exportent les rapports. La valeur d'avant correction
+est conservee dans `predicted_passengers_raw` a des fins de diagnostic.
+
+Auparavant cette fonction ecrivait le resultat dans une colonne separee
+`predicted_passengers_adjusted` en laissant `predicted_passengers` inchangee : le
+graphique de la GUI et le tableau du PDF affichaient alors deux previsions differentes
+(ecart de ~30 % sur `data/sample.csv`) pour un meme calcul.
+"""
 function apply_forecast_continuity(forecast_df::DataFrame, training_df::DataFrame)::DataFrame
     if !("predicted_passengers" in names(forecast_df)) || !("actual_passengers" in names(training_df))
         return forecast_df
@@ -58,16 +126,17 @@ function apply_forecast_continuity(forecast_df::DataFrame, training_df::DataFram
         return forecast_df
     end
     factor = last_actual / first_pred
-    if factor <= 0
+    if !isfinite(factor) || factor <= 0
         return forecast_df
     end
     df = copy(forecast_df)
     df[!, :predicted_passengers_raw] = df.predicted_passengers
-    df[!, :predicted_passengers_adjusted] = df.predicted_passengers .* factor
-    
+    df[!, :predicted_passengers] = df.predicted_passengers .* factor
+
     for col in ["predicted_passengers_lower", "predicted_passengers_upper"]
         if col in names(df)
-            df[!, Symbol(col * "_adjusted")] = df[!, Symbol(col)] .* factor
+            df[!, Symbol(col * "_raw")] = df[!, Symbol(col)]
+            df[!, Symbol(col)] = df[!, Symbol(col)] .* factor
         end
     end
     n = nrow(df)
@@ -77,6 +146,25 @@ function apply_forecast_continuity(forecast_df::DataFrame, training_df::DataFram
     df[!, :continuity_gap_pct] = fill((first_pred - last_actual) / last_actual * 100, n)
     df[!, :continuity_adjustment_applied] = fill(true, n)
     return df
+end
+
+"""
+    growth_rate(values) -> Vector{Float64}
+
+Croissance annuelle en %. Une prevision nulle rend la croissance indefinie (NaN) plutot
+que de produire un `Inf`/`NaN` implicite par division par zero, ou un chiffre invente en
+plafonnant le denominateur a 1.0 comme le faisait `_forecast_df`.
+"""
+function growth_rate(values::AbstractVector)::Vector{Float64}
+    n = length(values)
+    n <= 1 && return zeros(Float64, n)
+    v = Float64.(values)
+    rates = Vector{Float64}(undef, n)
+    rates[1] = 0.0
+    for i in 2:n
+        rates[i] = v[i - 1] == 0 ? NaN : (v[i] - v[i - 1]) / v[i - 1] * 100
+    end
+    return rates
 end
 
 end
