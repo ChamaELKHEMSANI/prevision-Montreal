@@ -177,7 +177,7 @@
     }
   },
   "kenza_probabilistic": {
-    "active": true,
+    "active": false,
     "label": "Kenza Probabiliste",
     "category": "traditionnels",
     "default_params": {

@@ -122,6 +122,9 @@ end
     end
 
     @testset "Le modele probabiliste est reproductible" begin
+        # KenzaProbabilisticModel n'est pas enregistre (modele non implemente, cf.
+        # _register_defaults) : on l'instancie donc directement. Le test protege la
+        # correction de reproductibilite tant que ce code reste dans le depot.
         # Sans graine, deux executions identiques renvoyaient des previsions differentes.
         first_model = Models.KenzaProbabilisticModel()
         Abstract.fit!(first_model, data)

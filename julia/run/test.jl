@@ -25,9 +25,11 @@ const KENZA_MODELS = [
     "kenza_simplifie",
     "kenza_simplifie_indexe",
     "kenza_indexed",
-    "kenza_simplifie_combine",
-    "kenza_probabilistic"
+    "kenza_simplifie_combine"
 ]
+
+# `kenza_probabilistic` est volontairement absent : modele non implemente, non enregistre
+# dans models/registry.jl. Voir le commentaire de _register_defaults.
 
 
 
