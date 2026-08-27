@@ -52,6 +52,7 @@ docs/
   Guide_utilisateur.pdf         # Mise en page du precedent (bash docs/build_pdf.sh)
   build_pdf.sh                  # Regeneration du PDF via pandoc + xelatex
   images/                       # Captures d'ecran du guide
+  Presentation_methode_Kenza.pptx  # Presentation de la methode et de l'outil
 old/
   Guide_utilisateur.pdf         # Export Google Docs d'origine, remplace
   README.md                     # Ce qu'il decrit et pourquoi il ne fait plus foi
@@ -67,6 +68,16 @@ le choix et le parametrage des modeles, la lecture des resultats et les exports.
   precedent, a regenerer par `bash docs/build_pdf.sh` apres chaque modification.
 - [old/Guide_utilisateur.pdf](old/Guide_utilisateur.pdf) — l'export Google Docs
   d'origine, conserve pour la trace. Il ne fait plus foi ; voir [old/README.md](old/README.md).
+
+[docs/Presentation_methode_Kenza.pptx](docs/Presentation_methode_Kenza.pptx) presente la
+methode Kenza, ses fondements, l'outil et ses resultats. Ses chiffres ont ete recalcules
+sur le code actuel (calage 1990-2011, validation 2012-2019 sur `data/sample.csv`) et ses
+noms de parametres suivent le renommage curve_c / curve_d / kenza_k1 / kenza_k2. Les
+mentions de date, d'auditoire et les adresses de courriel en ont ete retirees : le depot
+est public.
+
+Les captures d'ecran de la presentation datent de l'interface d'origine et n'ont pas ete
+refaites.
 
 ## Prerequis
 
