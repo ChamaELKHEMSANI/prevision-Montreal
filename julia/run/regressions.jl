@@ -11,6 +11,7 @@ Pkg.activate(JULIA_ROOT)
 
 include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
 
+using Dates
 using DataFrames
 using JSON3
 using Test
@@ -507,5 +508,49 @@ end
         pdf = AF.ExportService.to_pdf(result)
         @test length(pdf) > 1000
         @test String(pdf[1:8]) == "%PDF-1.4"
+    end
+
+    @testset "Les formateurs comptent des caracteres, pas des octets" begin
+        F = AF.Formatters
+
+        # text[1:n] indexe des octets : la coupe tombait au milieu d'un « é ».
+        @test F.truncate_text("aéroport de Montréal", 6) == "aér..."
+        @test F.truncate_text("Montréal–Toronto : évolution", 10) == "Montréa..."
+
+        # La longueur rendue est exactement celle demandee, accents compris.
+        long = "Prévision de la demande aérienne pour la région métropolitaine"
+        for n in 4:40
+            @test length(F.truncate_text(long, n)) == n
+        end
+
+        # « ... » depassait la limite quand elle valait moins de trois caracteres.
+        @test F.truncate_text("abcdef", 2) == "ab"
+        @test F.truncate_text("abcdef", 0) == ""
+        @test F.truncate_text("abc", 10) == "abc"
+    end
+
+    @testset "format_dataframe est appelable sous ses deux formes" begin
+        F = AF.Formatters
+        df = DataFrame(taux = [0.5, -0.05], montant = [1234.5, 2.0])
+
+        # Sans formats : Dict() est un Dict{Any,Any}, qui ne descend pas de Dict{String,Dict}.
+        @test F.format_dataframe(df) == df
+
+        # Avec le litteral naturel, qui s'infere en Dict{String,Dict{String,String}}.
+        out = F.format_dataframe(df, Dict("taux" => Dict("type" => "percentage")))
+        @test out.taux == ["50.0%", "-5.0%"]
+
+        # Le seuil de conversion etait asymetrique : -0,05 restait « -0.05% ».
+        @test F.format_percentage(-0.05) == "-5.0%"
+        @test F.format_percentage(0.05) == "5.0%"
+
+        # Une colonne qui porte un `missing` ne fait plus echouer le tableau entier.
+        creux = DataFrame(taux = [0.5, missing])
+        @test F.format_dataframe(creux, Dict("taux" => Dict("type" => "percentage"))).taux ==
+              ["50.0%", "missing"]
+
+        # log(negatif) levait DomainError ; DateTime ignorait format_str.
+        @test F.format_file_size(-5) == "-5 Bytes"
+        @test F.format_date(DateTime(2020, 1, 2, 3)) == "02/01/2020"
     end
 end

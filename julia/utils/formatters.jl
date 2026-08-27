@@ -14,12 +14,37 @@ function format_number(value; decimals::Int=2)
     end
 end
 
+"""
+    format_percentage(value; decimals=2)
+
+Rend un pourcentage a partir d'une fraction ou d'une valeur deja exprimee en pourcent.
+
+Deux corrections par rapport a la version initiale.
+
+`Float64(value)` etait appele sans filet, la ou `format_number` protege le sien : un
+`missing` ou une chaine levait une `MethodError`. Or `format_dataframe` applique cette
+fonction colonne par colonne, et une colonne de resultats porte regulierement des `missing`
+— une seule cellule vide faisait echouer la mise en forme du tableau entier.
+
+Le seuil de conversion etait `0 <= v <= 1`, donc asymetrique : une croissance de +0,05
+devenait « 5.0% » mais une decroissance de -0,05 restait « -0.05% ». Les taux de croissance
+de ce projet sont negatifs sur plusieurs paires de villes (Montreal-Toronto perd 35 % entre
+2007 et 2019), l'asymetrie n'etait donc pas theorique. Le seuil est desormais `abs(v) <= 1`.
+
+L'heuristique elle-meme reste ambigue — 0,5 peut signifier 0,5 % comme 50 % — mais elle est
+au moins coherente dans les deux sens.
+"""
 function format_percentage(value; decimals::Int=2)
     if value === nothing
         return ""
     end
-    numeric = Float64(value)
-    if 0 <= numeric <= 1
+    numeric = try
+        Float64(value)
+    catch
+        return string(value)
+    end
+    isfinite(numeric) || return string(numeric)
+    if abs(numeric) <= 1
         numeric *= 100
     end
     return "$(round(numeric, digits=decimals))%"
@@ -30,40 +55,86 @@ function format_currency(value; currency="EUR", decimals::Int=2)
     return "$(format_number(value, decimals=decimals)) $(get(symbols, currency, currency))"
 end
 
+# `date isa Date` etait faux pour un `DateTime`, qui retombait donc sur `string(date)` et
+# ignorait `format_str` : une date-heure s'affichait « 2020-01-02T03:00:00 » au milieu d'une
+# colonne au format « dd/mm/yyyy ». Les deux types partagent le meme formateur.
 function format_date(date; format_str="short")
     if date === nothing
         return ""
-    elseif date isa Date
+    elseif date isa Union{Date,DateTime}
         return Dates.format(date, format_str == "iso" ? "yyyy-mm-dd" : "dd/mm/yyyy")
     end
     return string(date)
 end
 
+# Une taille negative ou non finie faisait lever `DomainError` a `log`. Le signe est
+# desormais traite a part, la magnitude seule passant par le logarithme.
 function format_file_size(bytes; decimals::Int=1)
-    if bytes == 0
-        return "0 Bytes"
+    numeric = try
+        Float64(bytes)
+    catch
+        return string(bytes)
     end
+    (isfinite(numeric) && numeric != 0) || return "0 Bytes"
+    sign = numeric < 0 ? "-" : ""
+    magnitude = abs(numeric)
     sizes = ["Bytes", "KB", "MB", "GB", "TB"]
-    idx = min(floor(Int, log(bytes) / log(1024)) + 1, length(sizes))
-    size = bytes / (1024 ^ (idx - 1))
-    return idx == 1 ? "$(Int(size)) $(sizes[idx])" : "$(round(size, digits=decimals)) $(sizes[idx])"
+    idx = clamp(floor(Int, log(magnitude) / log(1024)) + 1, 1, length(sizes))
+    size = magnitude / (1024 ^ (idx - 1))
+    return idx == 1 ? "$sign$(round(Int, size)) $(sizes[idx])" :
+                      "$sign$(round(size, digits=decimals)) $(sizes[idx])"
 end
 
-function truncate_text(text::String, max_length::Int=100)
-    return length(text) <= max_length ? text : text[1:max_length-3] * "..."
+"""
+    truncate_text(text, max_length=100)
+
+Tronque a `max_length` CARACTERES, points de suspension compris.
+
+`length(text)` compte des caracteres mais `text[1:n]` indexe des OCTETS : sur du texte
+accentue les deux ne coincident pas. `truncate_text("aeroport de Montreal", 6)` — avec le
+vrai « é » — levait `StringIndexError` en coupant au milieu d'un caractere multi-octets, et
+quand la coupe tombait par chance sur une frontiere valide le resultat faisait environ la
+moitie de la longueur demandee. `first(text, n)` compte en caracteres et ne peut pas couper
+un caractere en deux.
+
+La version initiale renvoyait aussi « ... », soit trois caracteres, pour `max_length` de 0,
+1 ou 2 : le resultat depassait la limite qu'il devait respecter. En deca de quatre
+caracteres il n'y a pas la place pour l'ellipse, on rend donc le debut du texte tel quel.
+"""
+function truncate_text(text::AbstractString, max_length::Int=100)
+    length(text) <= max_length && return String(text)
+    max_length <= 3 && return String(first(text, max(max_length, 0)))
+    return String(first(text, max_length - 3)) * "..."
 end
 
-function format_dataframe(df::DataFrame, column_formats::Dict{String,Dict}=Dict())
+"""
+    format_dataframe(df, column_formats=Dict())
+
+Applique un format par colonne, decrit par `"type"` (`number`, `percentage`, `currency`,
+`date`) et ses options.
+
+La signature etait `column_formats::Dict{String,Dict}`, et la fonction en devenait
+inappelable sous ses deux formes. Sans argument d'abord : la valeur par defaut `Dict()` est
+un `Dict{Any,Any}`, qui ne descend pas de `Dict{String,Dict}` — les types parametriques de
+Julia sont invariants — d'ou `MethodError`. Avec argument ensuite : le litteral naturel
+`Dict("a" => Dict("type" => "percentage"))` s'infere en `Dict{String,Dict{String,String}}`,
+qui ne descend pas davantage de `Dict{String,Dict}`. Il fallait ecrire l'annotation complete
+`Dict{String,Dict}(...)` pour atteindre la methode.
+
+`AbstractDict` accepte les trois formes.
+"""
+function format_dataframe(df::DataFrame, column_formats::AbstractDict=Dict{String,Any}())
     formatted = copy(df)
     for (col, spec) in column_formats
-        if col in names(formatted)
+        name = string(col)
+        if name in names(formatted)
             fmt_type = get(spec, "type", "number")
             decimals = get(spec, "decimals", 2)
             formatter = fmt_type == "percentage" ? x -> format_percentage(x, decimals=decimals) :
                         fmt_type == "currency" ? x -> format_currency(x, currency=get(spec, "currency", "EUR"), decimals=decimals) :
                         fmt_type == "date" ? x -> format_date(x, format_str=get(spec, "format", "short")) :
                         x -> format_number(x, decimals=decimals)
-            formatted[!, col] = map(formatter, formatted[!, col])
+            formatted[!, name] = map(formatter, formatted[!, name])
         end
     end
     return formatted
