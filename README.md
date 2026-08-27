@@ -213,6 +213,36 @@ se fait pendant la lecture: extraire cent paires coute le meme passage qu'une se
 
 Compter environ trois minutes par fichier annuel (~690 000 lignes).
 
+### Population des villes
+
+`run/fetch_statcan_population.jl` recupere la population annuelle des regions
+metropolitaines de recensement aupres de Statistique Canada (tableau 17-10-0135-01,
+Licence du gouvernement ouvert) et la restitue par code d'aeroport, de 2001 a 2022.
+
+```bash
+julia --project=julia julia/run/fetch_statcan_population.jl \
+  --years 2005-2020 --output julia/data/population_rmr.csv
+
+julia --project=julia julia/run/extract_city_pairs.jl \
+  --source "/chemin/Data DS" --airport YUL \
+  --population julia/data/population_rmr.csv --output julia/data/yul_pairs.csv
+```
+
+`--population` ajoute `population_origin`, `population_dest` et leur somme dans
+`population`. **Sommer les deux extremites est une hypothese de modelisation**, pas un
+fait: elle suppose que les deux villes engendrent la demande a parts proportionnelles a
+leur taille. Une paire dont une extremite n'a pas de population connue est ecartee, jamais
+completee d'une valeur arbitraire.
+
+La correspondance aeroport -> RMR est une table explicite dans le script, volontairement
+lisible plutot qu'un appariement automatique par coordonnees: une erreur d'affectation s'y
+verrait. `--list-geo` affiche les intitules disponibles.
+
+Une RMR n'est pas une zone de chalandise: pour Montreal en 2019, 4 334 308 contre
+4 649 265 dans le fichier de chalandise `2019-2045 - CA.xlsx` du Drive, soit 7 % d'ecart.
+Ce dernier ne couvre par ailleurs que 2019-2045 et ne peut donc pas servir a l'ajustement
+sur l'historique.
+
 Deux limites a connaitre:
 
 - **Ces fichiers ne portent pas de tarif.** Les series produites conviennent a

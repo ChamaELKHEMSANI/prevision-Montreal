@@ -336,6 +336,26 @@ end
         @test next_year[("YUL", "YYZ")] == 950.0
     end
 
+    @testset "La jointure de population somme les deux extremites" begin
+        include(joinpath(JULIA_ROOT, "run", "extract_city_pairs.jl"))
+        pairs = DataFrame(year = [2019, 2019, 2019], origin = ["YUL", "YUL", "YUL"],
+                          dest = ["YYZ", "YVR", "ZZZ"],
+                          actual_passengers = [1.0e6, 4.0e5, 5.0e3])
+        popfile = joinpath(mktempdir(), "pop.csv")
+        CSV.write(popfile, DataFrame(year = [2019, 2019, 2019],
+                                     airport = ["YUL", "YYZ", "YVR"],
+                                     population = [4.0e6, 6.0e6, 2.7e6]); delim = ';')
+
+        joined = join_population(pairs, popfile)
+        # `population` est la somme des deux extremites : hypothese de modelisation, pas fait.
+        @test joined.population == [4.0e6 + 6.0e6, 4.0e6 + 2.7e6]
+        @test joined.population_origin == [4.0e6, 4.0e6]
+        # Une extremite sans population fait ecarter la paire, jamais completer d'une valeur
+        # arbitraire : c'est le travers que toute cette branche corrige ailleurs.
+        @test nrow(joined) == 2
+        @test !("ZZZ" in joined.dest)
+    end
+
     @testset "K1 et K2 de la loi portent le meme nom partout" begin
         # `parameters["k1"]` / `["k2"]` designaient les coefficients de forme "c" et "d" de
         # la courbe, PAS les constantes K1 et K2 de la loi de Kenza, lesquelles vivaient

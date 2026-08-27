@@ -44,7 +44,10 @@ function usage()
       --pair A-B          une paire precise (repetable)
       --years 2005-2019   restreint la plage d'annees
       --directional       rapporte A->B et B->A separement (par defaut ils sont cumules)
-      --macro FILE.csv    CSV a joindre sur `year` (population, gdp_per_capita, ...)
+      --population FILE   CSV year;airport;population produit par fetch_statcan_population.jl.
+                          Ajoute population_origin, population_dest et leur somme dans
+                          `population`, colonne attendue par les modeles.
+      --macro FILE.csv    CSV a joindre sur `year` (gdp_per_capita, ...)
       --output FILE.csv   fichier de sortie (defaut: stdout)
       --help
 
@@ -55,7 +58,8 @@ end
 function parse_args(args::Vector{String})
     opts = Dict{String,Any}("airports" => String[], "pairs" => Tuple{String,String}[],
                             "directional" => false, "years" => nothing,
-                            "source" => nothing, "macro" => nothing, "output" => nothing)
+                            "source" => nothing, "macro" => nothing, "output" => nothing,
+                            "population" => nothing)
     i = 1
     while i <= length(args)
         a = args[i]
@@ -69,6 +73,8 @@ function parse_args(args::Vector{String})
             opts["source"] = args[i + 1]; i += 2
         elseif a == "--macro"
             opts["macro"] = args[i + 1]; i += 2
+        elseif a == "--population"
+            opts["population"] = args[i + 1]; i += 2
         elseif a == "--output"
             opts["output"] = args[i + 1]; i += 2
         elseif a == "--airport"
@@ -178,6 +184,45 @@ function extract_year(path::String, year::Int, selector, directional::Bool)
     return totals, countries, scanned
 end
 
+"""
+    join_population(pairs, path) -> DataFrame
+
+Attache la population des deux extremites et leur somme.
+
+La loi de Kenza s'ecrit `D = P x K1 x F*(K2 x pn)`, ou `P` est la population qui engendre
+la demande. Pour un marche bidirectionnel, la somme des deux extremites est la premiere
+approximation raisonnable — c'est une hypothese de modelisation, pas un fait : elle suppose
+que les deux villes contribuent a parts egales et proportionnelles a leur taille.
+
+Une paire dont une extremite n'a pas de population connue est ecartee plutot que completee
+d'une valeur arbitraire, et le nombre de lignes perdues est annonce.
+"""
+function join_population(pairs::DataFrame, path::String)
+    pop = CSV.read(path, DataFrame; delim = ';')
+    for col in ("year", "airport", "population")
+        col in names(pop) || error("Le fichier --population doit contenir la colonne '$col'")
+    end
+    lookup = Dict((row.airport, row.year) => Float64(row.population) for row in eachrow(pop))
+
+    origin_pop = [get(lookup, (r.origin, r.year), missing) for r in eachrow(pairs)]
+    dest_pop = [get(lookup, (r.dest, r.year), missing) for r in eachrow(pairs)]
+    out = copy(pairs)
+    out[!, :population_origin] = origin_pop
+    out[!, :population_dest] = dest_pop
+
+    complete = .!ismissing.(origin_pop) .& .!ismissing.(dest_pop)
+    dropped = nrow(out) - count(complete)
+    if dropped > 0
+        missing_codes = sort(unique(vcat(
+            [r.origin for (r, ok) in zip(eachrow(out), complete) if !ok && ismissing(r.population_origin)],
+            [r.dest for (r, ok) in zip(eachrow(out), complete) if !ok && ismissing(r.population_dest)])))
+        @warn "Paires ecartees faute de population sur une extremite" lignes=dropped codes=first(missing_codes, 15)
+    end
+    out = out[complete, :]
+    out[!, :population] = Float64.(out.population_origin) .+ Float64.(out.population_dest)
+    return out
+end
+
 function main()
     opts = parse_args(copy(ARGS))
     files = source_files(opts["source"], opts["years"])
@@ -207,6 +252,10 @@ function main()
 
     result = vcat(frames...)
     sort!(result, [:origin, :dest, :year])
+
+    if opts["population"] !== nothing
+        result = join_population(result, opts["population"])
+    end
 
     if opts["macro"] !== nothing
         macro_df = CSV.read(opts["macro"], DataFrame)
