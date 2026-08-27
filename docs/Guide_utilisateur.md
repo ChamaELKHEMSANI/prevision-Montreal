@@ -112,7 +112,7 @@ L’application permet de :
 - ajuster les paramètres du modèle ou les laisser par défaut ;
 - lancer une prévision sur un horizon personnalisé ;
 - comparer les performances de plusieurs modèles sur un même jeu de données ;
-- exporter les résultats sous forme de tableaux (CSV, Excel) et de rapports complets (PDF).
+- exporter le tableau de prévision (CSV, Excel) et le graphique (PDF).
 
 L’outil a été conçu pour être à la fois pédagogique et opérationnel. Il convient aussi bien à des études de cas académiques qu’à des exercices de planification stratégique dans le secteur du transport aérien.
 
@@ -120,7 +120,7 @@ L’outil a été conçu pour être à la fois pédagogique et opérationnel. Il
 
 **Fonctionnalité - Chargement de données**
 
-Description : Import de fichiers CSV ou Excel, avec validation automatique des colonnes et nettoyage des valeurs aberrantes.
+Description : Import de fichiers CSV ou Excel, avec normalisation des noms de colonnes et validation automatique. Les données ne sont pas modifiées : un fichier invalide est refusé, pas corrigé (§ 4.5).
 
 **Fonctionnalité - Modèles Kenza**
 
@@ -132,7 +132,7 @@ Description : Modification des paramètres via des contrôles graphiques (cases 
 
 **Fonctionnalité - Prévision unique**
 
-Description : Calibration sur la période d’entraînement choisie, génération d’une prévision avec intervalle de confiance, affichage des métriques de performance.
+Description : Calibration sur la période d’entraînement choisie, génération d’une prévision encadrée d’une bande d’incertitude, affichage des métriques de performance. La bande est un forfait ±20 % par défaut, et non un intervalle de confiance (§ 8.4).
 
 **Fonctionnalité - Comparaison de modèles**
 
@@ -140,7 +140,7 @@ Description : Sélection simultanée de plusieurs modèles ; tableau comparatif 
 
 **Fonctionnalité - Export**
 
-Description : Sauvegarde des prévisions en CSV, Excel (multi-onglets) ou PDF (rapport structuré avec graphique et diagnostics).
+Description : Sauvegarde du tableau de prévision en CSV ou en Excel (une feuille), et du graphique en PDF (§ 9).
 
 ## 2. Installation et lancement
 
@@ -395,11 +395,15 @@ Cet onglet s’affiche par défaut et contient trois parties :
   - MAPE (erreur relative moyenne en %)
   - MSE (erreur quadratique moyenne, non racinée)
 
-  `kenza_indexed` en publie davantage : les clés `in_sample_*` pour son calage et les clés `oos_*` pour sa validation glissante hors échantillon (voir § 8.1). Chaque indicateur n'apparaît qu'une fois : le modèle les expose en double, sous deux casses, pour ses différents consommateurs. 2. Graphique de prévision (au centre) :
+  `kenza_indexed` en publie davantage : les clés `in_sample_*` pour son calage et les clés `oos_*` pour sa validation glissante hors échantillon (voir § 8.1). Chaque indicateur n'apparaît qu'une fois : le modèle les expose en double, sous deux casses, pour ses différents consommateurs.
+
+2. Graphique de prévision (au centre) :
   - Courbe bleue avec points : l’historique réel des passagers.
   - Courbe rouge en pointillés : la prévision générée.
   - Zone grisée : la bande d'incertitude. Sa légende nomme la méthode employée — par défaut « Bande +/-20 % (indicative, non statistique) », qui n'est **pas** un intervalle de confiance (voir § 8.4).
-  - Les axes sont automatiquement étiquetés (Année / Passagers). 3. Boutons d’export (en bas) : trois boutons pour enregistrer les résultats :
+  - Les axes sont automatiquement étiquetés (Année / Passagers).
+
+3. Boutons d’export (en bas) : trois boutons pour enregistrer les résultats :
   - « Exporter CSV »
   - « Exporter Excel »
   - « Exporter PDF »
@@ -549,7 +553,11 @@ L’importation des données se fait en quelques clics :
 
   - Naviguez jusqu’au dossier contenant votre fichier.
   - Choisissez le fichier. Le filtre de la boîte de dialogue est réglé sur `*.csv` ; passez-le sur « tous les fichiers » pour sélectionner un `.xlsx`.
-  - Cliquez sur « Ouvrir » (ou « Open »). 4. Attendre le traitement : l’application lit le fichier, normalise les noms de colonnes et effectue une validation automatique (voir § 4.5). Ce traitement est quasi instantané pour des fichiers de quelques milliers de lignes. 5. Vérifier le message de confirmation : l’étiquette sous le bouton de chargement change et affiche le nombre de lignes chargées, par exemple : « 34 lignes chargées depuis `sample.csv` ». La barre de statut en bas du panneau indique « Statut : données chargées ».
+  - Cliquez sur « Ouvrir » (ou « Open »).
+
+4. Attendre le traitement : l’application lit le fichier, normalise les noms de colonnes et effectue une validation automatique (voir § 4.5). Ce traitement est quasi instantané pour des fichiers de quelques milliers de lignes.
+
+5. Vérifier le message de confirmation : l’étiquette sous le bouton de chargement change et affiche le nombre de lignes chargées, par exemple : « 34 lignes chargées depuis `sample.csv` ». La barre de statut en bas du panneau indique « Statut : données chargées ».
 
 #### Que faire en cas d’erreur ?
 
@@ -598,7 +606,11 @@ Une fois les données chargées, vous pouvez choisir la plage d’années qui se
 2. Deux champs numériques sont disponibles :
 
   - « Début : » (spin button) : année de début de la période.
-  - « Fin : » (spin button) : année de fin de la période. 3. Utilisez les flèches haut/bas ou saisissez directement une année dans chaque champ. 4. Les bornes minimales et maximales sont automatiquement calquées sur les années présentes dans vos données.
+  - « Fin : » (spin button) : année de fin de la période.
+
+3. Utilisez les flèches haut/bas ou saisissez directement une année dans chaque champ.
+
+4. Les bornes minimales et maximales sont automatiquement calquées sur les années présentes dans vos données.
 
 Attention : l’année de début doit être inférieure ou égale à l’année de fin. Si vous saisissez une combinaison invalide, un message d’erreur s’affiche.
 
@@ -894,10 +906,18 @@ Cette génération automatique vous garantit que vous saisissez toujours des val
 1. Choisir le modèle dont vous souhaitez modifier les paramètres :
 
   - En mode « Modèle unique » : sélectionnez-le dans la liste déroulante principale.
-  - En mode « Comparaison » : sélectionnez-le dans la liste déroulante secondaire « Paramètres du modèle : ». 2. Localiser le paramètre dans la zone défilante. Les paramètres sont listés dans un ordre alphabétique approximatif. 3. Modifier la valeur :
+  - En mode « Comparaison » : sélectionnez-le dans la liste déroulante secondaire « Paramètres du modèle : ».
+
+2. Localiser le paramètre dans la zone défilante. Les paramètres sont listés dans un ordre alphabétique approximatif.
+
+3. Modifier la valeur :
   - Case à cocher : cliquez sur la case pour basculer entre true (cochée) et false (décochée).
   - Champ numérique : cliquez dans le champ et tapez une nouvelle valeur, ou utilisez les flèches haut/bas pour l’incrémenter/décrémenter.
-  - Zone de texte : cliquez dans la zone, effacez le contenu et tapez votre texte. 4. La modification est prise en compte immédiatement : vous n’avez pas besoin d’enregistrer. Dès que vous modifiez un contrôle, la nouvelle valeur est stockée en mémoire. 5. Lancer la prévision : une fois vos paramètres ajustés, cliquez sur « Lancer le modèle » (ou « Lancer la comparaison ») pour appliquer les changements.
+  - Zone de texte : cliquez dans la zone, effacez le contenu et tapez votre texte.
+
+4. La modification est prise en compte immédiatement : vous n’avez pas besoin d’enregistrer. Dès que vous modifiez un contrôle, la nouvelle valeur est stockée en mémoire.
+
+5. Lancer la prévision : une fois vos paramètres ajustés, cliquez sur « Lancer le modèle » (ou « Lancer la comparaison ») pour appliquer les changements.
 
 > **Précision des champs numériques.** Les champs décimaux affichent huit décimales. Les
 > versions antérieures n'en affichaient que deux, et le widget réinjectait sa valeur affichée
@@ -1129,7 +1149,9 @@ Avant de cliquer sur le bouton, assurez-vous que :
 2. Observation du calcul :
 
   - La barre de statut en bas du panneau de gauche affiche « Exécution de [nom du modèle]... ».
-  - Le calcul dure généralement moins de 2 secondes ; il s'allonge sur `kenza` si `monte_carlo_simulations` est élevé. 3. Affichage des résultats :
+  - Le calcul dure généralement moins de 2 secondes ; il s'allonge sur `kenza` si `monte_carlo_simulations` est élevé.
+
+3. Affichage des résultats :
   - Les métriques apparaissent dans la zone de texte en haut de l’onglet « Modèle unique ».
   - Le graphique se dessine automatiquement dans la zone centrale.
   - La barre de statut passe à « Statut : prévision terminée ».
@@ -1169,7 +1191,9 @@ Paramètres du modèle : ».
 5. Observation du calcul :
 
   - La barre de statut indique « Comparaison en cours... ».
-  - L’application exécute successivement tous les modèles cochés (le temps total est proportionnel au nombre de modèles). 6. Affichage des résultats :
+  - L’application exécute successivement tous les modèles cochés (le temps total est proportionnel au nombre de modèles).
+
+6. Affichage des résultats :
   - Un tableau comparatif s’affiche dans la zone de texte en haut de l’onglet. Il présente une ligne par modèle avec ses métriques (RMSE, MAE, R², MAPE).
   - Un graphique superposé apparaît en dessous, avec l’historique en noir et chaque modèle en pointillés de couleur différente.
   - La barre de statut passe à « Statut : comparaison terminée ».
@@ -1991,27 +2015,15 @@ Description : Contactez votre tuteur ou le responsable du projet pour toute ques
 
 Avant chaque prévision importante, passez cette checklist :
 
-● Les données contiennent bien year et `actual_passengers` (et si possible population,
-
-```
-gdp_per_capita, ticket_price).
-```
-
-● La période d’entraînement est cohérente (au moins 10 ans, sans années de crise exceptionnelle).
-
-● Les paramètres `gdp_growth_rate`, `population_growth_rate` et `ticket_price_inflation` sont réalistes (basés sur des sources externes ou sur la moyenne historique).
-
-● `optimize_parameters` est activé (sauf cas particulier).
-
-● Le modèle choisi est adapté à vos données (ex. `kenza_simplifie_indexe` si pas de prix du billet).
-
-● Un horizon cohérent est défini (5-15 ans pour une étude stratégique).
-
-● Vous avez testé au moins un autre modèle en comparaison pour valider la robustesse.
-
-● Les métriques sont satisfaisantes (MAPE < 10 %, R² > 0,85).
-
-● Le diagnostic de continuité montre un écart relatif < 10 %.
+- Les données contiennent bien `year` et `actual_passengers` (et si possible `population`, `gdp_per_capita`, `ticket_price`).
+- La période d’entraînement est cohérente (au moins 10 ans, sans années de crise exceptionnelle).
+- Les paramètres `gdp_growth_rate`, `population_growth_rate` et `ticket_price_inflation` sont réalistes (basés sur des sources externes ou sur la moyenne historique).
+- Vous avez décidé en connaissance de cause de la valeur d’`optimize_parameters`. Elle vaut `false` par défaut, et c’est cette valeur qui reproduit le classeur Excel de référence ; l’activer améliore l’ajustement mais fait diverger de la parité validée.
+- Le modèle choisi est adapté à vos données (ex. `kenza_simplifie_indexe` si pas de prix du billet).
+- Un horizon cohérent est défini (5-15 ans pour une étude stratégique).
+- Vous avez testé au moins un autre modèle en comparaison pour valider la robustesse.
+- Les métriques sont satisfaisantes (MAPE < 10 %, R² > 0,85 **dans l’échantillon** ; pour `kenza_indexed`, lisez le R² hors échantillon, cf. § 8.1).
+- Le diagnostic de continuité montre un écart relatif < 10 %.
 
 Une fois cette checklist validée, votre prévision est prête à être exportée et partagée en toute confiance.
 
@@ -2058,7 +2070,9 @@ F = a × (1 - 1 / (1 + exp(b + c × ρ^d)))
   - a (`distribution_a`) : pénétration maximale théorique (défaut = 1,1572)
   - b (`distribution_b`) : paramètre de forme (défaut = 4,3517)
   - c (`curve_c`) : niveau global (défaut = -6,5992)
-  - d (`curve_d`) : exposant du prix normalisé (défaut = 0,3955) 3. Demande : Demande = `kenza_k1` × Population × F
+  - d (`curve_d`) : exposant du prix normalisé (défaut = 0,3955)
+
+3. Demande : Demande = `kenza_k1` × Population × F
 
 **Paramètres principaux**
 
@@ -2358,7 +2372,7 @@ Ce tableau vous aide à sélectionner le modèle en fonction des colonnes que vo
 
 | Colonnes disponibles | Modèles possibles | Modèle recommandé |
 | --- | --- | --- |
-| year + actual_passengers uniquement | Aucun (les modèles ont besoin de population) | ➡ Ajoutez une colonne population. Sans population, la demande normalisée ne peut pas être calculée. |
+| year + actual_passengers uniquement | Aucun (les modèles ont besoin de population) | → Ajoutez une colonne population. Sans population, la demande normalisée ne peut pas être calculée. |
 | year + actual_passengers + population | Tous les modèles indexés (kenza_simplifie_indexe, kenza_indexed) | Kenza Simplifie Indexe (simple et rapide). |
 | year + actual_passengers + population + gdp_per_capita | Tous les modèles indexés | Kenza Indexed (si vous voulez une courbe en S) ou Kenza Simplifie Indexe (pour la simplicité). |
 | year + actual_passengers + population + gdp_per_capita + ticket_price | Tous les modèles | Kenza Simplifie pour commencer, puis Kenza Econometric pour une analyse approfondie — avec `monte_carlo_simulations` > 0 si vous voulez une bande fondée sur les données. |

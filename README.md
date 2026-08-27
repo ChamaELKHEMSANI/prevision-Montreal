@@ -48,18 +48,25 @@ julia/
     kenza_validation_report.xlsx   # Sortie de report.py
     report.py                      # Rapport Excel avec graphiques natifs
 docs/
-  Guide_utilisateur.md          # Guide utilisateur (transcription du PDF)
+  Guide_utilisateur.md          # Guide utilisateur : SOURCE de reference
+  Guide_utilisateur.pdf         # Mise en page du precedent (bash docs/build_pdf.sh)
+  build_pdf.sh                  # Regeneration du PDF via pandoc + xelatex
   images/                       # Captures d'ecran du guide
-Guide_utilisateur.pdf           # Meme guide, tel qu'exporte de Google Docs
+Guide_utilisateur.pdf           # Export Google Docs d'origine, OBSOLETE
 ```
 
 Le guide utilisateur decrit l'installation, l'interface, le chargement des donnees,
 le choix et le parametrage des modeles, la lecture des resultats et les exports :
 [docs/Guide_utilisateur.md](docs/Guide_utilisateur.md). Il a ete transcrit du PDF,
 dont la source Google Docs n'est pas versionnee ; c'est desormais la version a
-modifier. Son contenu a ete mis en accord avec le code : modeles reellement
-enregistres, noms actuels des parametres, nature des bandes d'incertitude et contenu
-reel des exports.
+modifier. `docs/Guide_utilisateur.pdf` n'en est que la mise en page, regeneree par
+`bash docs/build_pdf.sh`. Son contenu a ete mis en accord avec le code : modeles
+reellement enregistres, noms actuels des parametres, nature des bandes d'incertitude
+et contenu reel des exports.
+
+Le `Guide_utilisateur.pdf` de la racine est l'export Google Docs d'origine. Il decrit
+une version anterieure du code et n'est plus a jour : le conserver ou le supprimer
+reste a decider.
 
 ## Prerequis
 
