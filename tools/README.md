@@ -38,6 +38,52 @@ Trois pieges propres a cet export sont traites :
 Le Markdown est desormais la source de reference du guide. Ce script n'a donc plus
 vocation a servir, sauf pour reconstruire une autre version du PDF d'origine.
 
+### Faut-il en faire un outil generique ? Non.
+
+La question s'est posee : l'approche — deduire la structure de la geometrie plutot
+que du texte aplati — se generalise a tout export Google Docs ou Word. La reponse
+est venue d'une mesure, faite le 27 aout 2026 sur `old/Guide_utilisateur.pdf`
+contre `pymupdf4llm` 1.28.2.
+
+| | `pdf2md.py` | `pymupdf4llm` |
+|---|---|---|
+| couverture des mots | **99,9 %** | 99,8 % |
+| tableaux detectes | 15 | **17** |
+| titres | 185 | 305 |
+| blocs de code | 13 | **16** |
+| legendes de figures | 7/7 | 7/7 |
+| **identifiants coupes recolles** | **5 sur 5** | **0 sur 3** |
+| images extraites | 7 | 0 (option requise) |
+| lignes a maintenir | 438 | **0** |
+
+`pymupdf4llm` egale ou depasse ce script partout, sauf sur un point : il conserve
+la coupure de cellule en `<br>` au lieu de recoller les identifiants.
+
+    pymupdf4llm :  |Kenza Simplifie Combine|`kenza_simpli`<br>`fie_combine`|…
+    pdf2md.py   :  | Kenza Simplifie Combine | kenza_simplifie_combine | …
+
+A noter : la reconstruction des espaces, qu'on pouvait croire distinctive, n'en est
+pas une — `pymupdf4llm` les restitue correctement. L'avantage se reduit donc au
+recollage des identifiants, soit une trentaine de lignes de post-traitement sur sa
+sortie. Pas de quoi maintenir 438 lignes.
+
+**Ce qui justifie tout de meme de garder ce script**, ce n'est pas sa qualite
+d'extraction : c'est sa licence. `pdfminer.six` est en MIT, comme ce depot ;
+`pymupdf4llm` et `PyMuPDF` sont en AGPL 3.0, ou licence commerciale. Pour une
+conversion ponctuelle en interne, l'AGPL ne pose pas de probleme ; pour un outil
+distribue ou integre a un service, c'est le critere qui tranche.
+
+Reproduire la comparaison :
+
+```bash
+python3 -m venv /tmp/venv-pdf && /tmp/venv-pdf/bin/pip install pymupdf4llm
+/tmp/venv-pdf/bin/python -c "
+import pymupdf4llm, pathlib
+pathlib.Path('/tmp/pymupdf4llm.md').write_text(
+    pymupdf4llm.to_markdown('old/Guide_utilisateur.pdf'), encoding='utf-8')"
+grep -c 'kenza_simplifie_combine' /tmp/pymupdf4llm.md   # le test decisif
+```
+
 ---
 
 ## `fix_pptx.py` — corrections de fond de la presentation
