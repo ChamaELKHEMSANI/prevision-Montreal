@@ -156,7 +156,7 @@ Exigence : Windows 10/11, macOS 9.15 (Catalina) ou supérieur, ou une distributi
 
 **Élément - Julia**
 
-Exigence : Version 1.6 ou supérieure (testée avec les versions 1.9 et 1.12). Télécharger Julia
+Exigence : Version 1.10 ou supérieure recommandée (testée sous 1.12). Télécharger Julia
 
 **Élément - Espace disque**
 
@@ -181,16 +181,14 @@ Exécutez les étapes suivantes dans l’ordre. Les manipulations en ligne de co
 - Avec Git (recommandé) : ouvrez un terminal (ou cmd sous Windows) et tapez :
 
 ```bash
-git clone https://github.com/ChamaELKHEMSANI/Evolutionary-Algoritms-Forcast.git
-cd AirTrafficForecaster
+git clone https://github.com/ChamaELKHEMSANI/prevision-Montreal.git
+cd prevision-Montreal
 ```
-
-(remplacez <url-du-depot> par l’adresse fournie par votre équipe)
 
 - Sans Git : téléchargez le dossier du projet au format ZIP depuis le dépôt, puis décompressez-le. Ouvrez un terminal et placez-vous dans le dossier décompressé :
 
-```
-cd chemin/vers/AirTrafficForecaster
+```bash
+cd chemin/vers/prevision-Montreal
 ```
 
 ##### Étape 2 - Lancer Julia
@@ -209,10 +207,14 @@ L’application utilise un environnement dédié qui liste toutes les bibliothè
 
 ```julia
 import Pkg
-Pkg.activate(".")
+Pkg.activate("julia")
 ```
 
-Le message indique désormais (AirTrafficForecaster) pkg> si vous êtes dans le bon dossier.
+Attention au chemin : l'environnement n'est **pas** à la racine du dépôt mais dans le
+sous-dossier `julia/`, qui contient `Project.toml` et `Manifest.toml`. `Pkg.activate(".")`
+depuis la racine créerait un environnement vide et l'étape suivante n'installerait rien.
+
+Le message indique désormais `(julia) pkg>` si vous êtes dans le bon dossier.
 
 ##### Étape 4 - Installer les dépendances
 
@@ -241,14 +243,17 @@ Vous revenez au terminal classique.
 1. Placez-vous dans le dossier racine du projet (si ce n’est pas déjà fait) :
 
 ```bash
-cd chemin/vers/AirTrafficForecaster
+cd chemin/vers/prevision-Montreal
 ```
 
-2. Lancez l’interface avec Julia :
+2. Lancez l’interface avec Julia, en lui indiquant l'environnement du projet :
 
 ```bash
-julia gui.jl
+julia --project=julia julia/run/gui.jl
 ```
+
+L'option `--project=julia` est indispensable : sans elle, Julia démarre dans l'environnement
+global et ne trouve ni Gtk, ni Plots, ni les autres dépendances.
 
 3. Après quelques secondes de chargement (précompilation), la fenêtre principale apparaît.
 
@@ -259,7 +264,8 @@ julia gui.jl
 2. Tapez :
 
 ```julia
-include("gui.jl")
+import Pkg; Pkg.activate("julia")
+include("julia/run/gui.jl")
 ```
 
 #### Que faire si la fenêtre ne s’affiche pas ?
@@ -280,12 +286,10 @@ Lors du tout premier lancement, Julia compile une partie du code pour l’adapte
 Résumé des commandes pour une installation rapide (copier-coller) :
 
 ```bash
-git clone <url>
-cd AirTrafficForecaster
-julia
-import Pkg; Pkg.activate("."); Pkg.instantiate()
-exit()
-julia gui.jl
+git clone https://github.com/ChamaELKHEMSANI/prevision-Montreal.git
+cd prevision-Montreal
+julia --project=julia -e "import Pkg; Pkg.instantiate()"
+julia --project=julia julia/run/gui.jl
 ```
 
 ## 3. Présentation de l’interface
@@ -311,7 +315,7 @@ Le panneau de gauche est organisé en sections verticales. Nous les décrivons d
 
 #### 3.2.1 Chargement des données
 
-- Bouton « Charger CSV » : ouvre une boîte de dialogue pour sélectionner votre fichier de données (CSV ou Excel).
+- Bouton « Charger CSV » : ouvre une boîte de dialogue pour sélectionner votre fichier de données. Le filtre proposé est `*.csv` : pour ouvrir un classeur Excel, changez le filtre sur « tous les fichiers » dans la boîte de dialogue. La lecture, elle, gère les deux formats.
 - Étiquette d’état : une fois le fichier chargé, elle affiche le nombre de lignes et le nom du fichier (ex. « 34 lignes chargées depuis `sample.csv` »).
 
 #### 3.2.2 Période d’entraînement
@@ -330,7 +334,7 @@ Cette zone change selon l’onglet actif (détail au § 3.3).
 
 #### 3.2.4 Horizon de prévision
 
-Un champ numérique intitulé « Horizon » vous permet de définir le nombre d’années à prévoir (de 1 à 30 ans). La valeur par défaut est 9.
+Un champ numérique intitulé « Horizon » vous permet de définir le nombre d’années à prévoir (de 1 à 30 ans). La valeur par défaut est 10.
 
 #### 3.2.5 Paramètres du modèle
 
@@ -355,7 +359,10 @@ Ces deux boutons sont visibles en fonction de l’onglet actif (seul l’un des 
 
 Tout en bas, une étiquette indique l’état courant :
 
-- « Statut : prêt » au démarrage.
+- « Statut : données chargées » dès le démarrage : l'application charge automatiquement le
+  jeu d'exemple `julia/data/sample.csv`, et l'étiquette de chargement affiche
+  « 34 lignes chargées depuis sample.csv ». Vous pouvez lancer une prévision sans rien
+  charger vous-même. Si ce fichier est introuvable, l'étiquette reste sur « Statut : prêt ».
 - « Statut : données chargées » après import.
 - « Statut : prévision terminée » après un calcul réussi.
 - « Erreur : … » en cas de problème (avec un message explicite).
@@ -380,15 +387,18 @@ Le panneau droit est organisé en deux onglets accessibles par des clics sur leu
 
 Cet onglet s’affiche par défaut et contient trois parties :
 
-1. Indicateurs de performance (en haut) : une zone de texte qui liste les métriques du modèle calibré :
+1. Indicateurs de performance (en haut) : une zone de texte qui liste, par ordre alphabétique, tous les indicateurs finis publiés par le modèle :
 
   - RMSE (erreur quadratique moyenne)
   - MAE (erreur absolue moyenne)
   - R² (coefficient de détermination)
-  - MAPE (erreur relative moyenne en %) Ces valeurs vous permettent d’évaluer la qualité de l’ajustement sur la période d’entraînement. 2. Graphique de prévision (au centre) :
+  - MAPE (erreur relative moyenne en %)
+  - MSE (erreur quadratique moyenne, non racinée)
+
+  `kenza_indexed` en publie davantage : les clés `in_sample_*` pour son calage et les clés `oos_*` pour sa validation glissante hors échantillon (voir § 8.1). Chaque indicateur n'apparaît qu'une fois : le modèle les expose en double, sous deux casses, pour ses différents consommateurs. 2. Graphique de prévision (au centre) :
   - Courbe bleue avec points : l’historique réel des passagers.
   - Courbe rouge en pointillés : la prévision générée.
-  - Zone grisée (si disponible) : l’intervalle de confiance à 95 % autour de la prévision.
+  - Zone grisée : la bande d'incertitude. Sa légende nomme la méthode employée — par défaut « Bande +/-20 % (indicative, non statistique) », qui n'est **pas** un intervalle de confiance (voir § 8.4).
   - Les axes sont automatiquement étiquetés (Année / Passagers). 3. Boutons d’export (en bas) : trois boutons pour enregistrer les résultats :
   - « Exporter CSV »
   - « Exporter Excel »
@@ -465,7 +475,7 @@ L’application accepte deux formats de fichiers :
 | Format | Extension | Particularités |
 | --- | --- | --- |
 | CSV | .csv | Fichier texte où les colonnes sont séparées par un séparateur (virgule ou point-virgule). L’application détecte automatiquement le séparateur. |
-| Excel | .xlsx ou .xls | Fichier Excel classique. L’application lit la première feuille du classeur. |
+| Excel | .xlsx | Fichier Excel au format Open XML. L’application lit la première feuille du classeur, en-têtes comprises. Le format hérité `.xls` (Excel 97-2003) n'est pas géré par la bibliothèque de lecture : convertissez-le en `.xlsx`. |
 
 Remarque : si votre fichier CSV utilise le point-virgule (;) comme séparateur (format français courant), l’application le reconnaît automatiquement et l’importe correctement.
 
@@ -515,7 +525,7 @@ Description : Prix moyen du billet d’avion (dans la même monnaie que le PIB).
 
 #### 4.2.3 Colonnes optionnelles
 
-Vous pouvez ajouter d’autres colonnes (ex. `fuel_price`, route) : elles seront ignorées par les modèles mais conservées dans les exports.
+Vous pouvez ajouter d’autres colonnes (ex. `fuel_price`, route) : elles sont ignorées par les modèles. Elles ne sont pas non plus reprises dans les exports, qui ne contiennent que le tableau de prévision construit par le modèle (voir § 9.2).
 
 #### 4.2.4 Exemple de fichier valide
 
@@ -538,7 +548,7 @@ L’importation des données se fait en quelques clics :
 3. Sélectionner votre fichier dans la boîte de dialogue qui s’ouvre :
 
   - Naviguez jusqu’au dossier contenant votre fichier.
-  - Choisissez le fichier (.csv, .xlsx ou .xls).
+  - Choisissez le fichier. Le filtre de la boîte de dialogue est réglé sur `*.csv` ; passez-le sur « tous les fichiers » pour sélectionner un `.xlsx`.
   - Cliquez sur « Ouvrir » (ou « Open »). 4. Attendre le traitement : l’application lit le fichier, normalise les noms de colonnes et effectue une validation automatique (voir § 4.5). Ce traitement est quasi instantané pour des fichiers de quelques milliers de lignes. 5. Vérifier le message de confirmation : l’étiquette sous le bouton de chargement change et affiche le nombre de lignes chargées, par exemple : « 34 lignes chargées depuis `sample.csv` ». La barre de statut en bas du panneau indique « Statut : données chargées ».
 
 #### Que faire en cas d’erreur ?
@@ -1003,7 +1013,7 @@ Cela signifie que vous pouvez avoir des réglages différents pour le même mod�
 #### 6.4.2 Que se passe-t-il lorsque je change de modèle ?
 
 - Lorsque vous sélectionnez un nouveau modèle dans une liste déroulante, l’application charge automatiquement les paramètres précédemment sauvegardés pour ce modèle (dans le mode courant).
-- Si c’est la première fois que vous sélectionnez ce modèle dans ce mode, les paramètres par défaut (issus du fichier `model_metadata`.json) sont chargés.
+- Si c’est la première fois que vous sélectionnez ce modèle dans ce mode, les paramètres par défaut sont chargés depuis `julia/config/model_metadata.json`. C'est ce fichier, et non le code Julia, qui fixe les valeurs proposées par l'interface.
 
 #### 6.4.3 Que se passe-t-il lorsque je change d’onglet ?
 
@@ -1130,7 +1140,7 @@ Si une erreur survient, la barre de statut affiche un message explicite, par exe
 
 - « Erreur : Model not fitted » (le modèle n’a pas pu être calibré - vérifiez vos données).
 - « Erreur : Chargez d’abord les données » (vous avez oublié de charger un fichier).
-- « Erreur : Paramètres JSON invalides » (vous avez modifié un paramètre texte avec une syntaxe incorrecte).
+- « Erreur : [type d'erreur Julia] » suivi du message d'origine. L'interface ne reformule pas les erreurs des modèles : le texte brut apparaît dans la barre d'état, et la trace complète dans le terminal d'où vous avez lancé l'application.
 
 Dans tous les cas, corrigez l’erreur et relancez.
 
@@ -1322,7 +1332,14 @@ Le graphique superposé est précieux pour visualiser les divergences futures :
 
 ### 8.3 Indicateurs de continuité (diagnostic)
 
-L’application calcule automatiquement un diagnostic de continuité pour vérifier la cohérence entre la dernière valeur historique et la première prévision. Ces indicateurs sont affichés dans la zone des métriques ou dans le rapport PDF.
+L’application calcule automatiquement un diagnostic de continuité pour vérifier la cohérence
+entre la dernière valeur historique et la première prévision.
+
+Ces indicateurs ne sont **pas** affichés dans la zone des métriques. Ce sont des colonnes du
+tableau de prévision : vous les trouverez dans un export CSV ou Excel (§ 9.2), sous les noms
+`continuity_reference_passengers`, `continuity_gap`, `continuity_gap_pct` et
+`continuity_adjustment_factor`, ainsi que les colonnes `*_raw` qui donnent la prévision avant
+ajustement.
 
 **Indicateur - Dernier historique**
 
