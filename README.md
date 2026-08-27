@@ -56,6 +56,11 @@ docs/
 old/
   Guide_utilisateur.pdf         # Export Google Docs d'origine, remplace
   README.md                     # Ce qu'il decrit et pourquoi il ne fait plus foi
+tools/
+  pdf2md.py                     # Conversion du guide PDF vers Markdown
+  fix_pptx.py                   # Corrections de fond de la presentation
+  generalize_pptx.py            # Depersonnalisation de la presentation
+  README.md                     # Mode d'emploi et enchainement des trois
 ```
 
 Le guide utilisateur decrit l'installation, l'interface, le chargement des donnees,
@@ -75,6 +80,10 @@ sur le code actuel (calage 1990-2011, validation 2012-2019 sur `data/sample.csv`
 noms de parametres suivent le renommage curve_c / curve_d / kenza_k1 / kenza_k2. Les
 mentions de date, d'auditoire et les adresses de courriel en ont ete retirees : le depot
 est public.
+
+Les scripts qui ont produit ces deux documents sont dans [tools/](tools/), avec leur mode
+d'emploi : ils portent la trace des decisions prises, et une correction de fond se fait
+dans `tools/fix_pptx.py` puis se propage en rejouant la chaine.
 
 Les captures d'ecran de la presentation datent de l'interface d'origine et n'ont pas ete
 refaites : les diapositives 13 et 14 le signalent, leur capture montrant encore les
