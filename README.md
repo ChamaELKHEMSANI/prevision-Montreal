@@ -273,6 +273,25 @@ Deux limites a connaitre:
   Verifie: origines et destinations y sont a 100 % "US", et ni YUL ni YYZ n'y figurent.
   Elle ne peut pas servir pour un flux canadien.
 
+### Evaluer une paire
+
+`run/evaluate_pair.jl` ajuste les modeles sur une paire et rapporte leur performance hors
+echantillon, comparee a deux references naives evaluees sur exactement le meme protocole.
+
+```bash
+julia --project=julia julia/run/evaluate_pair.jl \
+  --series julia/data/yul_series.csv --pair YUL-YYZ --horizon 3
+```
+
+`--list` enumere les paires disponibles. Seuls les modeles indexes sont evalues: les series
+extraites ne portent pas de tarif.
+
+Les references naives ne sont pas decoratives. Un R2 dans l'echantillon ne dit rien du
+pouvoir predictif — pour `kenza_indexed` il vaut 1 par construction — et un R2 hors
+echantillon negatif signifie « moins bon que la moyenne de la serie ». Un modele qui ne bat
+pas le report de la derniere valeur observee n'apporte rien qu'une regle d'une ligne ne
+donnerait deja.
+
 ## Validation contre Excel
 
 Le script de validation compare les sorties Julia avec les resultats caches provenant de l'ancien classeur Excel.

@@ -336,6 +336,19 @@ end
         @test next_year[("YUL", "YYZ")] == 950.0
     end
 
+    @testset "Les references naives suivent le meme protocole que les modeles" begin
+        include(joinpath(JULIA_ROOT, "run", "evaluate_pair.jl"))
+        # Serie strictement lineaire : le prolongement de tendance doit etre exact, le
+        # report de la derniere valeur non. Sans cela, la comparaison modele/reference ne
+        # voudrait rien dire.
+        linear = Float64[100 + 10i for i in 0:14]
+        naive = naive_metrics(linear, 8, 3)
+        @test isapprox(naive["tendance"]["MAPE"], 0.0; atol = 1e-9)
+        @test naive["report"]["MAPE"] > 1.0
+        # Meme decoupe que rolling_backtest_metrics : memes points, donc comparables.
+        @test naive["report"]["R2"] < naive["tendance"]["R2"]
+    end
+
     @testset "La serie macro ecarte les previsions par defaut" begin
         include(joinpath(JULIA_ROOT, "run", "build_macro_series.jl"))
         src = joinpath(mktempdir(), "gdp.csv")
