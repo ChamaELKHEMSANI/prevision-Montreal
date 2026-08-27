@@ -281,6 +281,61 @@ end
         @test result["metrics"]["RMSE"] != 10.5
     end
 
+    @testset "L'extracteur de paires de villes agrege correctement" begin
+        # Test autonome : on fabrique un classeur minimal, sans dependre du Drive.
+        include(joinpath(JULIA_ROOT, "run", "extract_city_pairs.jl"))
+        dir = mktempdir()
+        for (year, rows) in ((2018, [("YUL","JFK","Canada","United States",100.0),
+                                     ("JFK","YUL","United States","Canada",40.0),
+                                     ("YUL","YYZ","Canada","Canada",900.0),
+                                     ("LAX","SFO","United States","United States",7.0)]),
+                             (2019, [("YUL","JFK","Canada","United States",120.0),
+                                     ("YUL","YYZ","Canada","Canada",950.0)]))
+            XLSX.openxlsx(joinpath(dir, "CA - $year - pax.xlsx"), mode="w") do xf
+                sheet = xf[1]
+                XLSX.rename!(sheet, "Data")
+                headers = ["True Orig Code", "True Dest Code", "Orig Country", "Dest Country",
+                           string(year)]
+                for (c, h) in enumerate(headers)
+                    sheet[XLSX.CellRef(1, c)] = h
+                end
+                for (r, row) in enumerate(rows), (c, v) in enumerate(row)
+                    sheet[XLSX.CellRef(r + 1, c)] = v
+                end
+            end
+        end
+
+        files = source_files(dir, nothing)
+        @test first.(files) == [2018, 2019]
+
+        # Les deux sens sont cumules sous la paire triee : 100 + 40.
+        selector = build_selector(Dict("airports" => String[], "pairs" => [("YUL", "JFK")],
+                                       "directional" => false))
+        totals, countries, scanned = extract_year(files[1][2], 2018, selector, false)
+        @test scanned == 4
+        @test collect(keys(totals)) == [("JFK", "YUL")]
+        @test totals[("JFK", "YUL")] == 140.0
+        @test countries[("JFK", "YUL")] == ("Canada", "United States")
+
+        # En mode directionnel, les deux sens restent distincts.
+        directional_selector = build_selector(Dict("airports" => String[], "pairs" => [("YUL", "JFK")],
+                                                   "directional" => true))
+        directed, _, _ = extract_year(files[1][2], 2018, directional_selector, true)
+        @test directed[("YUL", "JFK")] == 100.0
+        @test directed[("JFK", "YUL")] == 40.0
+
+        # --airport retient toute paire touchant l'aeroport, et rien d'autre.
+        by_airport = build_selector(Dict("airports" => ["YUL"], "pairs" => Tuple{String,String}[],
+                                         "directional" => false))
+        airport_totals, _, _ = extract_year(files[1][2], 2018, by_airport, false)
+        @test sort(collect(keys(airport_totals))) == [("JFK", "YUL"), ("YUL", "YYZ")]
+
+        # La colonne de passagers porte l'annee pour titre : elle change d'un fichier a l'autre.
+        next_year, _, _ = extract_year(files[2][2], 2019, by_airport, false)
+        @test next_year[("JFK", "YUL")] == 120.0
+        @test next_year[("YUL", "YYZ")] == 950.0
+    end
+
     @testset "K1 et K2 de la loi portent le meme nom partout" begin
         # `parameters["k1"]` / `["k2"]` designaient les coefficients de forme "c" et "d" de
         # la courbe, PAS les constantes K1 et K2 de la loi de Kenza, lesquelles vivaient

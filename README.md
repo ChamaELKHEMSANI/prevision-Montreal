@@ -196,6 +196,32 @@ diagnostic uniquement. Passer `apply_continuity_adjustment => false` desactive l
 correction de saut entre historique et prevision (ce que fait `run/validate.jl`, Excel
 ne l'appliquant pas).
 
+## Extraire des series par paire de villes
+
+`run/extract_city_pairs.jl` construit des series annuelles par paire origine-destination a
+partir des fichiers annuels de trafic vrai O&D (`CA - <annee> - pax.xlsx`).
+
+```bash
+julia --project=julia julia/run/extract_city_pairs.jl \
+  --source "/chemin/Data DS" --airport YUL --output julia/data/yul_pairs.csv
+```
+
+Options: `--airport CODE` (toutes les paires touchant cet aeroport), `--pair A-B`,
+`--years 2005-2019`, `--directional`, `--macro FILE.csv` pour joindre population et
+PIB/habitant sur `year`, `--output`. `--airport` et `--pair` sont repetables et le filtrage
+se fait pendant la lecture: extraire cent paires coute le meme passage qu'une seule.
+
+Compter environ trois minutes par fichier annuel (~690 000 lignes).
+
+Deux limites a connaitre:
+
+- **Ces fichiers ne portent pas de tarif.** Les series produites conviennent a
+  `kenza_indexed` et `kenza_simplifie_indexe`, qui reconstruisent un indice de prix
+  implicite, et non a `kenza` ni `kenza_simplifie`, qui exigent `ticket_price`.
+- **La base BTS DB1B porte des tarifs mais est exclusivement domestique americaine.**
+  Verifie: origines et destinations y sont a 100 % "US", et ni YUL ni YYZ n'y figurent.
+  Elle ne peut pas servir pour un flux canadien.
+
 ## Validation contre Excel
 
 Le script de validation compare les sorties Julia avec les resultats caches provenant de l'ancien classeur Excel.
