@@ -36,7 +36,6 @@ julia/
     validators.jl               # Controle des donnees d'entree
     formatters.jl               # Formatage des valeurs et des exports
   run/
-    Project.toml                # Copie de l'environnement (non utilisee)
     test.jl                     # Test des modeles sur sample.csv
     regressions.jl              # Tests de non-regression (bugs corriges)
     validate.jl                 # Validation Julia vs Excel
