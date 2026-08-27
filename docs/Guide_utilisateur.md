@@ -686,9 +686,14 @@ aujourd'hui que les messages bloquants dans la barre d'état.
 
 Contrairement à ce que l'on pourrait attendre, l'application **ne** remplace **pas** les
 valeurs manquantes par la médiane, **n**'écrête **pas** les valeurs aberrantes et **ne**
-supprime **pas** les lignes en double. Une fonction `clean_data` faisant tout cela existe
-bien dans `julia/services/data_service.jl`, mais aucun appelant ne l'utilise : elle n'a
-jamais d'effet sur vos données. Corrigez vos fichiers à la source.
+supprime **pas** les lignes en double. Aucun de ces traitements n'existe : une donnée
+douteuse est signalée, ou refusée, jamais réparée en silence.
+
+C'est délibéré. Combler un trafic manquant par la médiane inventerait une observation que
+le modèle traiterait ensuite comme un fait ; écrêter les valeurs extrêmes effacerait 2009 et
+2020, précisément les chocs qu'une prévision long terme doit savoir reproduire. Corrigez vos
+fichiers à la source : vous seul savez si une année manque parce que la donnée n'a pas été
+collectée ou parce que le trafic était nul.
 
 ### 4.6 En résumé
 

@@ -157,46 +157,6 @@ function normalize_column_names(df::DataFrame)
     return df
 end
 
-function clean_data(df::DataFrame; protected=("year", "actual_passengers"))
-    cleaned = copy(df)
-    
-    for col in names(cleaned)
-        if eltype(cleaned[!, col]) <: Number
-            med = median(skipmissing(cleaned[!, col]))
-            replace!(cleaned[!, col], missing=>med)
-        else
-            counts = Dict{Any,Int}()
-            for value in skipmissing(cleaned[!, col])
-                counts[value] = get(counts, value, 0) + 1
-            end
-            if !isempty(counts)
-                mode = first(sort(collect(counts), by=last, rev=true)).first
-                replace!(cleaned[!, col], missing=>mode)
-            end
-        end
-    end
-    
-    unique!(cleaned)
-
-    # `year` et `actual_passengers` etaient ecretes comme les autres colonnes : un ecretage
-    # a 1.5*IQR sur la variable a expliquer efface les chocs reels (2009, 2020) que le
-    # modele doit precisement reproduire, et deforme l'axe temporel.
-    for col in names(cleaned)
-        col in protected && continue
-        if eltype(cleaned[!, col]) <: Number
-            d = collect(skipmissing(cleaned[!, col]))
-            if length(d) >= 4
-                q1, q3 = quantile(d, [0.25, 0.75])
-                iqr = q3 - q1
-                lower = q1 - 1.5iqr
-                upper = q3 + 1.5iqr
-                cleaned[!, col] = clamp.(cleaned[!, col], lower, upper)
-            end
-        end
-    end
-    return cleaned
-end
-
 function _records(df::DataFrame)
     return [Dict(string(col) => row[col] for col in names(df)) for row in eachrow(df)]
 end
