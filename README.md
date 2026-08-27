@@ -53,6 +53,7 @@ docs/
   build_pdf.sh                  # Regeneration du PDF via pandoc + xelatex
   images/                       # Captures d'ecran du guide
   Presentation_methode_Kenza.pptx  # Presentation de la methode et de l'outil
+  Presentation_methode_Kenza.pdf   # Meme presentation, au format PDF
 old/
   Guide_utilisateur.pdf         # Export Google Docs d'origine, remplace
   README.md                     # Ce qu'il decrit et pourquoi il ne fait plus foi
@@ -77,7 +78,9 @@ mentions de date, d'auditoire et les adresses de courriel en ont ete retirees : 
 est public.
 
 Les captures d'ecran de la presentation datent de l'interface d'origine et n'ont pas ete
-refaites.
+refaites : les diapositives 13 et 14 le signalent, leur capture montrant encore les
+anciens noms de parametres et les anciens chiffres. Le PDF est produit par
+`libreoffice --headless --convert-to pdf docs/Presentation_methode_Kenza.pptx`.
 
 ## Prerequis
 
