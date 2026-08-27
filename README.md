@@ -243,6 +243,27 @@ Une RMR n'est pas une zone de chalandise: pour Montreal en 2019, 4 334 308 contr
 Ce dernier ne couvre par ailleurs que 2019-2045 et ne peut donc pas servir a l'ajustement
 sur l'historique.
 
+### PIB par habitant
+
+`run/build_macro_series.jl` extrait la serie annuelle de PIB par habitant d'un pays depuis
+la chaine GDP du projet (FMI, Perspectives de l'economie mondiale, 2000-2030).
+
+```bash
+julia --project=julia julia/run/build_macro_series.jl \
+  --source "/chemin/GDP/data/processed/gdp_unified_2000_2030.csv" \
+  --country CAN --years 2005-2020 --output julia/data/macro_canada.csv
+```
+
+Les annees de prevision sont ecartees par defaut (`--with-forecast` pour les conserver):
+les melanger a l'historique dans un jeu d'ajustement reviendrait a calibrer un modele sur
+les projections d'un autre.
+
+Ce PIB est **national**. Toutes les paires d'un meme pays partagent donc exactement le meme
+prix normalise `pn`, ce qui suffit pour une premiere preuve de concept — le classeur Kenza
+d'origine raisonnait deja au niveau national — mais ignore l'ecart de revenu entre
+metropoles. Statistique Canada publie un PIB par division de recensement (tableau
+36-10-0468-01) pour descendre au niveau metropolitain.
+
 Deux limites a connaitre:
 
 - **Ces fichiers ne portent pas de tarif.** Les series produites conviennent a

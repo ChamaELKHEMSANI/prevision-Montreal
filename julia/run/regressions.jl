@@ -336,6 +336,27 @@ end
         @test next_year[("YUL", "YYZ")] == 950.0
     end
 
+    @testset "La serie macro ecarte les previsions par defaut" begin
+        include(joinpath(JULIA_ROOT, "run", "build_macro_series.jl"))
+        src = joinpath(mktempdir(), "gdp.csv")
+        CSV.write(src, DataFrame(
+            country_code = ["CAN", "CAN", "CAN", "USA"],
+            year = [2019, 2020, 2021, 2019],
+            is_forecast = [false, false, true, false],
+            GDP_Per_Capita_USD = [46352.9, 43537.9, 48000.0, 65000.0]))
+
+        historical = macro_series(src, "CAN", nothing, false)
+        # Melanger prevision et historique dans un jeu d'ajustement reviendrait a calibrer
+        # un modele sur les projections d'un autre.
+        @test historical.year == [2019, 2020]
+        @test all(.!historical.is_forecast)
+
+        @test macro_series(src, "CAN", nothing, true).year == [2019, 2020, 2021]
+        @test macro_series(src, "CAN", 2020:2021, true).year == [2020, 2021]
+        @test macro_series(src, "USA", nothing, false).gdp_per_capita == [65000.0]
+        @test_throws ErrorException macro_series(src, "FRA", nothing, false)
+    end
+
     @testset "La jointure de population somme les deux extremites" begin
         include(joinpath(JULIA_ROOT, "run", "extract_city_pairs.jl"))
         pairs = DataFrame(year = [2019, 2019, 2019], origin = ["YUL", "YUL", "YUL"],
