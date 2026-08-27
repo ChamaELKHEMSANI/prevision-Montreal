@@ -47,7 +47,18 @@ julia/
     kenza_excel_validation_*.csv   # Donnees de validation extraites d'Excel
     kenza_validation_report.xlsx   # Sortie de report.py
     report.py                      # Rapport Excel avec graphiques natifs
+docs/
+  Guide_utilisateur.md          # Guide utilisateur (transcription du PDF)
+  images/                       # Captures d'ecran du guide
+Guide_utilisateur.pdf           # Meme guide, tel qu'exporte de Google Docs
 ```
+
+Le guide utilisateur decrit l'installation, l'interface, le chargement des donnees,
+le choix et le parametrage des modeles, la lecture des resultats et les exports :
+[docs/Guide_utilisateur.md](docs/Guide_utilisateur.md). Il a ete transcrit du PDF,
+dont la source Google Docs n'est pas versionnee ; c'est desormais la version a
+modifier. Attention : il documente `kenza_probabilistic`, qui n'est ni implemente
+ni enregistre dans le registre.
 
 ## Prerequis
 
