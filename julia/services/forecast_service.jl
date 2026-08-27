@@ -16,6 +16,28 @@ function _kwargs(parameters::AbstractDict)
     return Dict(Symbol(string(k)) => v for (k, v) in parameters)
 end
 
+# Les points de prevision transitent par des Dict (ils sont serialises ainsi pour l'API) :
+# `DataFrame(result["forecast"])` en herite l'ordre de parcours, arbitraire. `year` se
+# retrouvait en onzieme colonne du CSV exporte, derriere `continuity_adjustment_applied`.
+# On impose donc un ordre de lecture, les colonnes de diagnostic passant derriere par ordre
+# alphabetique.
+const FORECAST_LEAD_COLUMNS = ["year", "predicted_passengers",
+                               "predicted_passengers_lower", "predicted_passengers_upper",
+                               "interval_method", "growth_rate",
+                               "population", "gdp_per_capita", "ticket_price"]
+
+"""
+    forecast_frame(result) -> DataFrame
+
+Les points de `result["forecast"]` en DataFrame, colonnes dans un ordre lisible.
+"""
+function forecast_frame(result)
+    df = DataFrame(result["forecast"])
+    lead = [c for c in FORECAST_LEAD_COLUMNS if c in names(df)]
+    rest = sort([c for c in names(df) if !(c in FORECAST_LEAD_COLUMNS)])
+    return select(df, vcat(lead, rest))
+end
+
 function run_forecast(model_name::String, data::DataFrame, parameters::AbstractDict, horizon::Int)
     @info "Running forecast" model=model_name horizon=horizon
     parameters = _string_dict(parameters)

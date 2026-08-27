@@ -128,7 +128,7 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     b = Float64(model.parameters["distribution_b"])
     
     if model.parameters["optimize_parameters"]
-        pop = data.population
+        pop = _sanitize_population(data.population)
         actual = data.actual_passengers
         
         # Définition de la fonction objectif
@@ -151,7 +151,7 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     # Calcul des prédictions sur l'entraînement
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
                             model.parameters["curve_c"], model.parameters["curve_d"])
-    pred = model.parameters["kenza_k1"] .* data.population .* F
+    pred = model.parameters["kenza_k1"] .* _sanitize_population(data.population) .* F
     
     # Facteur de continuité
     model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
@@ -198,7 +198,7 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
         train_F = _kenza_distribution(train_rho, model.parameters["distribution_a"], model.parameters["distribution_b"],
                                       model.parameters["curve_c"], model.parameters["curve_d"])
         residuals = model.train_data.actual_passengers .-
-                    (model.parameters["kenza_k1"] .* model.train_data.population .* train_F .*
+                    (model.parameters["kenza_k1"] .* _sanitize_population(model.train_data.population) .* train_F .*
                      model.continuity_adjustment_factor)
         resid_std = std(residuals)
         z = 1.96
@@ -270,7 +270,7 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     pn = (_sanitize_prices(data.ticket_price, ref_price) ./ data.gdp_per_capita) .* (ref_gdp / ref_price)
     pn = clamp.(pn, 0.2, 3.0)
     
-    dn = data.actual_passengers ./ max.(data.population, 1e-8)
+    dn = data.actual_passengers ./ _sanitize_population(data.population)
     
     # "C1"/"C2" sont toujours poses par le constructeur : le test `haskey` etait donc toujours
     # vrai et la regression n'etait jamais atteinte. `optimize_parameters=true` etait
@@ -286,7 +286,7 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     C1 = model.parameters["C1"]
     C2 = model.parameters["C2"]
     pred_dn = max.(0.0, C1 .* pn .+ C2)
-    pred = pred_dn .* data.population
+    pred = pred_dn .* _sanitize_population(data.population)
     
     model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
     adjusted = pred .* model.continuity_adjustment_factor
@@ -487,7 +487,7 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
         rho_t = _normalized_price(T_t, boot_data.gdp_per_capita, reference_gdp_per_cap)
         
         if model.parameters["optimize_parameters"]
-            pop = boot_data.population
+            pop = _sanitize_population(boot_data.population)
             actual = boot_data.actual_passengers
             best_error = Inf
             best_k1 = Float64(model.parameters["curve_c"])
@@ -530,7 +530,7 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     rho_t = _normalized_price(T_t, data.gdp_per_capita, reference_gdp_per_cap)
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
                             model.parameters["curve_c"], model.parameters["curve_d"])
-    pred = data.population .* F
+    pred = _sanitize_population(data.population) .* F
     
     model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
 
@@ -645,7 +645,7 @@ function AbstractModel.fit!(model::KenzaSimplifieIndexeModel, data::DataFrame; k
     pn = model.reference_gdp_per_cap ./ max.(data.gdp_per_capita, 1e-8)
     pn = clamp.(pn, 0.2, 3.0)
     
-    dn = data.actual_passengers ./ max.(data.population, 1e-8)
+    dn = data.actual_passengers ./ _sanitize_population(data.population)
     
     if model.parameters["optimize_parameters"]
         coef = hcat(pn, ones(length(pn))) \ dn
@@ -653,7 +653,7 @@ function AbstractModel.fit!(model::KenzaSimplifieIndexeModel, data::DataFrame; k
         model.parameters["C2"] = coef[2]
     end
     
-    pred = max.(0.0, model.parameters["C1"] .* pn .+ model.parameters["C2"]) .* data.population
+    pred = max.(0.0, model.parameters["C1"] .* pn .+ model.parameters["C2"]) .* _sanitize_population(data.population)
     model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
     model.metrics = calculate_metrics(data.actual_passengers, pred .* model.continuity_adjustment_factor)
     model.is_fitted = true
@@ -696,7 +696,7 @@ function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...
 
     ref_norm_pax = (haskey(model.parameters, "ref_normalized_traffic") && Float64(model.parameters["ref_normalized_traffic"]) > 0) ?
                    Float64(model.parameters["ref_normalized_traffic"]) :
-                   Float64(data[ref_idx, "actual_passengers"]) / max(Float64(data[ref_idx, "population"]), 1e-10)
+                   Float64(data[ref_idx, "actual_passengers"]) / _sanitize_population(data.population)[ref_idx]
 
     ref_elasticity = Float64(get(model.parameters, "ref_elasticity", -1.728566864526717))
 
@@ -707,11 +707,11 @@ function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...
     model.kenza_k1 = k1
 
     S = ref_gdp ./ max.(Float64.(data.gdp_per_capita), 1e-10)
-    P = Float64.(data.actual_passengers) ./ max.(Float64.(data.population), 1e-10)
+    P = Float64.(data.actual_passengers) ./ _sanitize_population(data.population)
     T = [_invert_kenza_distribution(P[i] / k1, a, b, c, d) / max(k2 * S[i], 1e-12) for i in eachindex(P)]
     model.last_implied_t = T[end]
 
-    pred_hist = k1 .* _kenza_distribution(k2 .* T .* S, a, b, c, d) .* data.population
+    pred_hist = k1 .* _kenza_distribution(k2 .* T .* S, a, b, c, d) .* _sanitize_population(data.population)
     model.continuity_adjustment_factor = 1.0
     model.is_fitted = true
 
@@ -766,7 +766,7 @@ function AbstractModel.fit!(model::KenzaSimplifieCombineModel, data::DataFrame; 
     model.reference_gdp_per_cap = Float64(data[1, "gdp_per_capita"])
     model.reference_ticket_price = _reference_ticket_price(data)
     
-    dn = Float64.(data.actual_passengers) ./ max.(Float64.(data.population), 1e-10)
+    dn = Float64.(data.actual_passengers) ./ _sanitize_population(data.population)
     year_index = Float64.(data.year .- model.reference_year)
     pn = _price_index(data.ticket_price, data.gdp_per_capita, model.reference_ticket_price, model.reference_gdp_per_cap)
     
@@ -777,7 +777,7 @@ function AbstractModel.fit!(model::KenzaSimplifieCombineModel, data::DataFrame; 
     elasticity_dn = model.elasticity_coef[1] .* pn .+ model.elasticity_coef[2]
     w = clamp(Float64(model.parameters["trend_weight"]), 0.0, 1.0)
     pred_dn = max.(0.0, w .* trend_dn .+ (1.0 - w) .* elasticity_dn)
-    pred = pred_dn .* data.population
+    pred = pred_dn .* _sanitize_population(data.population)
     
     model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
     model.metrics = calculate_metrics(data.actual_passengers, pred .* model.continuity_adjustment_factor)
@@ -871,6 +871,40 @@ function _reference_ticket_price(data::DataFrame)::Float64
 end
 
 """
+    _sanitize_population(population) -> Vector{Float64}
+
+Population annuelle garantie finie et strictement positive, chaque valeur inexploitable
+etant remplacee par celle de l'annee valide la plus proche.
+
+La population sert de DIVISEUR pour passer au trafic par habitant (`dn = trafic / pop`) et
+de MULTIPLICATEUR pour revenir au trafic. Les cinq modeles se protegeaient par
+`max.(population, 1e-8)`, ce qui ne protege de rien : une population nulle ne produit plus
+une division par zero, elle produit un `dn` de l'ordre de 1e15. Cette valeur domine ensuite
+la regression aux moindres carres de KenzaSimplifieCombineModel, dont la droite de tendance
+plonge, et le `max.(0.0, .)` qui suit ecrase toute la projection — la prevision sortait
+ENTIEREMENT NULLE, sans message, pour un seul zero en premiere ligne.
+
+C'est le meme defaut que celui deja corrige pour les prix (`_reference_ticket_price`), avec
+la meme conclusion : substituer une valeur plausible et le dire, plutot que laisser une
+donnee degeneree traverser silencieusement le calcul.
+
+Le repli est l'annee valide la plus proche, et non la premiere ni la mediane : une
+population evolue de quelques pour cent par an, la voisine immediate en est de loin le
+meilleur estimateur.
+"""
+function _sanitize_population(population)::Vector{Float64}
+    valid(v) = !ismissing(v) && v isa Number && isfinite(Float64(v)) && Float64(v) > 0
+    n = length(population)
+    good = [i for i in 1:n if valid(population[i])]
+    isempty(good) && error("Aucune population exploitable : toutes les valeurs sont " *
+                           "manquantes, nulles ou negatives.")
+    length(good) == n && return Float64[Float64(v) for v in population]
+    @warn "Population invalide remplacee par l'annee valide la plus proche" lignes=setdiff(1:n, good) maxlog=1
+    nearest(i) = good[argmin(abs.(good .- i))]
+    return Float64[Float64(population[valid(population[i]) ? i : nearest(i)]) for i in 1:n]
+end
+
+"""
     _sanitize_prices(ticket_price, reference) -> Vector{Float64}
 
 Remplace par `reference` les prix inexploitables (manquants, nuls, negatifs, non finis).
@@ -894,7 +928,9 @@ end
 
 function _future_macro(data::DataFrame, horizon::Int, kwargs)
     last_year = data[end, "year"]
-    last_pop = data[end, "population"]
+    # Une derniere population invalide contaminait toute la projection, comme le faisait
+    # un dernier prix invalide avant `_sanitize_prices`.
+    last_pop = _sanitize_population(data.population)[end]
     last_gdp = data[end, "gdp_per_capita"]
 
     gdp_growth = _kw(kwargs, :gdp_growth_rate, 0.03)

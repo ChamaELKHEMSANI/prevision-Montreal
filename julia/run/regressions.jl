@@ -553,4 +553,94 @@ end
         @test F.format_file_size(-5) == "-5 Bytes"
         @test F.format_date(DateTime(2020, 1, 2, 3)) == "02/01/2020"
     end
+
+    @testset "Le verdict du validateur est propage a l'appelant" begin
+        # `validate` produisait deja le diagnostic, mais process_uploaded_bytes posait
+        # "success" => true sans le consulter et process_uploaded_file n'exposait aucune
+        # cle "success". La GUI ne regarde que "success" : elle acceptait un fichier
+        # declare invalide, puis le premier « Lancer le modele » remontait
+        # `MethodError: no method matching Float64(::Missing)` dans la barre d'etat.
+        clean = read(SAMPLE)
+        ok = AF.DataService.process_uploaded_bytes("sample.csv", clean)
+        @test ok["success"] === true
+        @test ok["error"] === nothing
+        # `String(::Vector{UInt8})` vide le tableau qu'on lui passe : _read_csv_bytes
+        # detruisait les octets de son appelant, qui ne pouvait plus ni les relire ni
+        # reessayer. L'appel ci-dessus doit les laisser intacts.
+        @test length(clean) == filesize(SAMPLE)
+
+        lines = split(String(copy(clean)), "\r\n")
+        fields = split(lines[4], ';')
+        fields[end] = ""                       # actual_passengers manquant
+        lines[4] = join(fields, ';')
+        holed = Vector{UInt8}(join(lines, "\r\n"))
+
+        ko = AF.DataService.process_uploaded_bytes("trou.csv", holed)
+        @test ko["success"] === false
+        @test occursin("actual_passengers", ko["error"])
+        # Le DataFrame reste expose : l'appelant doit pouvoir montrer ce qui cloche.
+        @test ko["dataframe"] isa DataFrame
+        # Et c'est bien l'entree qui aurait fait echouer le modele.
+        @test_throws MethodError AF.ForecastService.run_forecast(
+            "kenza", ko["dataframe"], Dict{String,Any}(), 3)
+    end
+
+    @testset "Une population invalide ne vide pas la prevision" begin
+        # `max.(population, 1e-8)` ne protegeait de rien : une population nulle ne donne
+        # plus une division par zero, elle donne un trafic par habitant de l'ordre de 1e15.
+        # Cette valeur dominait la regression de kenza_simplifie_combine, dont la droite de
+        # tendance plongeait, et le max.(0.0, .) suivant ecrasait toute la projection : la
+        # prevision sortait ENTIEREMENT NULLE, sans message.
+        for (label, idx) in ("premiere ligne" => 1, "derniere ligne" => nrow(data))
+            broken = copy(data)
+            broken.population = Float64.(broken.population)
+            broken.population[idx] = 0.0
+            for name in AF.ModelRegistry.list_models()
+                model = AF.ModelRegistry.get_model(name)()
+                Abstract.fit!(model, broken)
+                predictions = Abstract.predict(model, 3).predicted_passengers
+                @test all(isfinite, predictions)
+                @test any(>(0), predictions)
+            end
+        end
+
+        # Le repli est l'annee valide la plus proche, pas la premiere ni la mediane : une
+        # population evolue de quelques pour cent par an.
+        series = [100.0, 0.0, 300.0, 400.0]
+        @test Models._sanitize_population(series) == [100.0, 100.0, 300.0, 400.0]
+        @test Models._sanitize_population([100.0, missing, missing, 400.0]) ==
+              [100.0, 100.0, 400.0, 400.0]
+        @test Models._sanitize_population([1.0, 2.0]) == [1.0, 2.0]
+        @test_throws ErrorException Models._sanitize_population([0.0, missing])
+    end
+
+    @testset "Les indicateurs ne sont ni doubles ni desordonnes" begin
+        # calculate_metrics publie chaque indicateur sous deux casses pour des
+        # consommateurs qui n'accordent pas leurs cles : l'interface en affichait dix la
+        # ou il y en a cinq, dans l'ordre arbitraire d'un Dict.
+        raw = Abstract.calculate_metrics([1.0, 2.0, 3.0], [1.1, 2.1, 2.9])
+        shown = Abstract.displayable_metrics(raw)
+        @test length(raw) == 10
+        @test length(shown) == 5
+        @test first.(shown) == ["MAE", "MAPE", "MSE", "R2", "RMSE"]
+
+        # Les valeurs non finies sont ecartees, pas affichees en "NaN".
+        @test isempty(Abstract.displayable_metrics(Dict("R2" => NaN, "MAE" => Inf)))
+        # Les prefixes restent distincts : in_sample_R2 n'est pas un doublon de R2.
+        prefixed = Abstract.displayable_metrics(Dict("R2" => 1.0, "r2" => 1.0,
+                                                     "in_sample_R2" => 0.5, "oos_R2" => 0.2))
+        @test first.(prefixed) == ["R2", "in_sample_R2", "oos_R2"]
+    end
+
+    @testset "Les colonnes de prevision sortent dans un ordre lisible" begin
+        # Les points transitent par des Dict : DataFrame(result["forecast"]) en heritait
+        # l'ordre de parcours, et `year` se retrouvait en onzieme colonne du CSV exporte,
+        # derriere `continuity_adjustment_applied`.
+        result = AF.ForecastService.run_forecast("kenza", data, Dict{String,Any}(), 5)
+        cols = names(AF.ForecastService.forecast_frame(result))
+        @test cols[1] == "year"
+        @test cols[2] == "predicted_passengers"
+        @test issorted(cols[findfirst(==("ticket_price"), cols) + 1:end])
+        @test sort(cols) == sort(names(DataFrame(result["forecast"])))
+    end
 end

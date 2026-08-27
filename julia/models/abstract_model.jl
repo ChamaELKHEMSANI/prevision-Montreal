@@ -49,6 +49,31 @@ function calculate_metrics(actual::AbstractVector, predicted::AbstractVector)::D
 end
 
 """
+    displayable_metrics(metrics) -> Vector{Pair{String,Float64}}
+
+Indicateurs finis, sans doublon de casse, dans un ordre stable.
+
+`calculate_metrics` publie chaque indicateur sous deux casses — "R2" et "r2", "RMSE" et
+"rmse" — parce que ses consommateurs n'accordent pas leurs cles. L'interface parcourait le
+Dict tel quel : chaque indicateur apparaissait donc DEUX FOIS, dans l'ordre arbitraire d'un
+Dict, cinq lignes utiles en produisant dix. Le tri place la forme majuscule avant la
+minuscule, c'est donc elle qui est retenue.
+"""
+function displayable_metrics(metrics)
+    seen = Set{String}()
+    out = Pair{String,Float64}[]
+    for k in sort(collect(keys(metrics)))
+        v = metrics[k]
+        (v isa Number && isfinite(float(v))) || continue
+        key = uppercase(string(k))
+        key in seen && continue
+        push!(seen, key)
+        push!(out, string(k) => float(v))
+    end
+    return out
+end
+
+"""
     rolling_backtest_metrics(model_factory, data; min_train, horizon, params) -> Dict{String,Float64}
 
 Validation glissante multi-pas : pour chaque annee de coupure au-dela de `min_train`,

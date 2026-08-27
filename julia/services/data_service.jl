@@ -43,6 +43,7 @@ function process_uploaded_file(filepath::String)
 
     validation = validate(df)
     summary = generate_summary(df)
+    success, error_message = _validation_verdict(validation)
 
     return Dict(
         "filename" => basename(filepath),
@@ -54,8 +55,32 @@ function process_uploaded_file(filepath::String)
         # jeu d'entrainement a partir de "data" et tronquait donc silencieusement a 100 ans.
         "data" => _records(first(df, min(100, nrow(df)))),
         "dataframe" => df,
-        "summary" => summary
+        "summary" => summary,
+        "success" => success,
+        "error" => error_message
     )
+end
+
+"""
+    _validation_verdict(validation) -> (Bool, Union{String,Nothing})
+
+Traduit le rapport du validateur en couple `(success, error)`.
+
+`validate` calculait deja le verdict — colonnes requises absentes, annees non entieres ou
+dupliquees, trafic manquant ou negatif — mais `process_uploaded_bytes` posait
+`"success" => true` sans jamais le consulter, et `process_uploaded_file` n'exposait aucune
+cle `success`. La GUI ne regarde que `success` : elle acceptait donc un fichier declare
+invalide, affichait « N lignes chargees », puis le premier « Lancer le modele » remontait
+`MethodError: no method matching Float64(::Missing)` dans la barre d'etat — alors que le
+validateur savait dire « Column 'actual_passengers' has 1 missing values ».
+
+Les `warnings` ne sont pas bloquants : une valeur aberrante reste une donnee exploitable.
+Le DataFrame est renvoye dans tous les cas, pour que l'appelant puisse montrer ce qui cloche.
+"""
+function _validation_verdict(validation::AbstractDict)
+    errors = get(validation, "errors", String[])
+    isempty(errors) && return true, nothing
+    return false, join(errors, " ; ")
 end
 
 function generate_summary(df::DataFrame)
@@ -177,7 +202,11 @@ function _records(df::DataFrame)
 end
 
 function _read_csv_bytes(content::Vector{UInt8})
-    text = String(content)
+    # `String(::Vector{UInt8})` PREND POSSESSION du tableau et le laisse vide : la
+    # fonction detruisait silencieusement les octets de son appelant, qui ne pouvait
+    # ni les relire ni reessayer apres une erreur. La copie est le prix a payer pour
+    # qu'un argument reste lisible apres l'appel.
+    text = String(copy(content))
     first_line = first(split(text, '\n'))
     delimiter = count(==(';'), first_line) > count(==(','), first_line) ? ';' : ','
     matrix = readdlm(IOBuffer(text), delimiter, String; quotes=true)
@@ -230,6 +259,7 @@ function process_uploaded_bytes(filename::String, content::Vector{UInt8})
     df = coerce_schema!(normalize_column_names(df))
     validation = validate(df)
     summary = generate_summary(df)
+    success, error_message = _validation_verdict(validation)
     return Dict(
         "filename" => filename,
         "records" => nrow(df),
@@ -239,7 +269,8 @@ function process_uploaded_bytes(filename::String, content::Vector{UInt8})
         "data" => _records(first(df, min(100, nrow(df)))),
         "dataframe" => df,
         "summary" => summary,
-        "success"=>  true
+        "success" => success,
+        "error" => error_message
     )
 end
 

@@ -59,7 +59,7 @@ function render_plot(p)
 end
 
 function plot_forecast(result, data, model_name)
-    forecast_df = DataFrame(result["forecast"])
+    forecast_df = ForecastService.forecast_frame(result)
     p = plot(data.year, data.actual_passengers, label="Historique", lw=2, marker=:circle, color=:blue)
     plot!(p, forecast_df.year, forecast_df.predicted_passengers, label="Prévision", lw=2, linestyle=:dash, color=:red, marker=:square)
     if :predicted_passengers_lower in propertynames(forecast_df)
@@ -81,7 +81,7 @@ function plot_comparison(results, data, model_names)
     colors = [:red, :blue, :green, :purple, :orange, :brown]
     for (i, m) in enumerate(model_names)
         if haskey(results[m], "forecast")
-            fdf = DataFrame(results[m]["forecast"])
+            fdf = ForecastService.forecast_frame(results[m])
             col = colors[mod1(i, length(colors))]
             plot!(p, fdf.year, fdf.predicted_passengers, label=m, lw=2, linestyle=:dash, color=col)
         end
@@ -434,6 +434,13 @@ function build_gui()
             spin
         elseif value isa Real
             spin = GtkSpinButton(-1.0e9, 1.0e9, 0.01)
+            # gtk_spin_button_new_with_range deduit le nombre de decimales du pas : 0.01
+            # donne deux decimales. Les constantes de la loi de Kenza en portent bien
+            # davantage, et le widget reinjecte sa valeur AFFICHEE dans l'ajustement des
+            # qu'il perd le focus. curve_d = 0.39546328 devenait donc 0.4 et
+            # kenza_k1 = 0.8193343775346827 devenait 0.82, silencieusement, des que
+            # l'utilisateur cliquait dans le champ. On fixe la precision explicitement.
+            set_gtk_property!(spin, :digits, 8)
             set_gtk_property!(spin, :value, Float64(value))
             spin
         else
@@ -616,10 +623,8 @@ function build_gui()
             app.results["single"] = result
             metrics = get(result, "metrics", Dict{String,Any}())
             metrics_str = "Modèle : $model_name\nPériode d'entraînement : $start_year - $end_year ($(nrow(training_data)) lignes)\nHorizon : $horizon\n"
-            for (k,v) in metrics
-                if v isa Number && isfinite(float(v))
-                    metrics_str *= "$k: $(round(float(v), digits=4))\n"
-                end
+            for (k, v) in AbstractModel.displayable_metrics(metrics)
+                metrics_str *= "$k: $(round(v, digits=4))\n"
             end
             set_text!(text_metrics, metrics_str)
             p = plot_forecast(result, app.data, model_name)
@@ -670,7 +675,8 @@ function build_gui()
             app.results["comparison"] = results
             comp_str = "Comparaison (entraînement : $start_year - $end_year, horizon : $horizon)\n"
             comp_str *= "Modèle\tRMSE\tMAE\tR2\tMAPE\n"
-            for (m, res) in results
+            for m in model_names
+                res = results[m]
                 metrics = get(res, "metrics", Dict{String,Any}())
                 rmse = get(metrics, "RMSE", NaN)
                 mae = get(metrics, "MAE", NaN)
@@ -711,11 +717,15 @@ function build_gui()
             file *= ".$ext"
         end
         try
-            forecast_df = DataFrame(result["forecast"])
+            forecast_df = ForecastService.forecast_frame(result)
             if format == "csv"
                 CSV.write(file, forecast_df)
             elseif format == "excel"
-                XLSX.writetable(file, forecast_df)
+                # Sans `overwrite`, XLSX.writetable leve « XLSXError: <fichier> already
+                # exists » : l'export Excel echouait systematiquement des que la cible
+                # existait, c'est-a-dire chaque fois que l'utilisateur confirmait le
+                # remplacement propose par la boite de dialogue.
+                XLSX.writetable(file, forecast_df; overwrite=true)
             elseif format == "pdf"
                 # Save the current plot as PDF
                 if app.current_plot !== nothing
