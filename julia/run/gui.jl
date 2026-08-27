@@ -9,7 +9,8 @@ include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
 
 ENV["GKSwstype"] = "100"
 
-using Gtk, GtkReactive, Cairo, Plots, DataFrames, CSV, XLSX, Dates, Statistics, Random, JSON3
+# Dates, Statistics et Random ne servaient qu'a generate_synthetic_data, supprimee.
+using Gtk, GtkReactive, Cairo, Plots, DataFrames, CSV, XLSX, JSON3
 using .AirTrafficForecaster
 
 gr(show=false)
@@ -35,13 +36,6 @@ function get_text(view::GtkTextView)
         (Ptr{Gtk.GObject}, Ptr{Gtk.GtkTextIter}, Ptr{Gtk.GtkTextIter}, Cint),
         buffer, start_iter, stop_iter, true)
     return Gtk.bytestring(ptr)
-end
-
-function parse_parameters_json(text::AbstractString)
-    cleaned = strip(String(text))
-    isempty(cleaned) && return Dict{String,Any}()
-    parsed = JSON3.read(cleaned, Dict{String,Any})
-    return Dict{String,Any}(parsed)
 end
 
 function pretty_json(value)
@@ -126,27 +120,6 @@ end
 # ----------------------------------------------------------------------
 # Data helpers 
 # ----------------------------------------------------------------------
-
-function generate_synthetic_data(n::Int=30)
-    Random.seed!(42)
-    years = collect(1995:(1995 + n - 1))
-    index = collect(1:n)
-    trend = 1_250_000 .+ 72_000 .* index
-    cycle = 115_000 .* sin.(2 * pi * index ./ 8)
-    shock = [year in 2009:2010 ? -180_000 : year == 2020 ? -520_000 : 0 for year in years]
-    noise = 35_000 .* randn(n)
-    passengers = max.(50_000, trend .+ cycle .+ shock .+ noise)
-    population = 31_000_000 .+ 185_000 .* index .+ 40_000 .* randn(n)
-    gdp = 2_900 .+ 85 .* index .+ 45 .* randn(n)
-    price = 160 .+ 1.8 .* index .+ 3 .* randn(n)
-    return DataFrame(
-        year=years,
-        actual_passengers=passengers,
-        population=population,
-        gdp_per_capita=gdp,
-        ticket_price=price,
-    )
-end
 
 function load_data(filepath::String)
     bytes = read(filepath)

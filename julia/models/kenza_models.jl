@@ -1011,13 +1011,6 @@ function _continuity_factor(actual, pred)
     return 1.0
 end
 
-function _calibrate_penetration(actual, raw, default::Float64)
-    valid = raw .> 0
-    any(valid) || return default
-    ratio = median(actual[valid] ./ raw[valid])
-    return isfinite(ratio) && ratio > 0 ? Float64(ratio) : default
-end
-
 _proxy_or_ticket_price(model, data::DataFrame) = data.ticket_price
 
 # `penetration` doit refleter exactement ce que predit le modele. Sans lui, l'optimiseur

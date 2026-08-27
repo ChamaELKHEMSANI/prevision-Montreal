@@ -28,7 +28,7 @@ function load_model_metadata()::Dict{String,Any}
     if _metadata_cache[] !== nothing
         return _metadata_cache[]::Dict{String,Any}
     end
-    path = joinpath(dirname(@__DIR__), "config", "model_metadata.json")
+    path = _metadata_path()
     if !isfile(path)
         _metadata_cache[] = Dict{String,Any}()
         return _metadata_cache[]::Dict{String,Any}
