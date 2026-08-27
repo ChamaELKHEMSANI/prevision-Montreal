@@ -52,21 +52,21 @@ docs/
   Guide_utilisateur.pdf         # Mise en page du precedent (bash docs/build_pdf.sh)
   build_pdf.sh                  # Regeneration du PDF via pandoc + xelatex
   images/                       # Captures d'ecran du guide
-Guide_utilisateur.pdf           # Export Google Docs d'origine, OBSOLETE
+old/
+  Guide_utilisateur.pdf         # Export Google Docs d'origine, remplace
+  README.md                     # Ce qu'il decrit et pourquoi il ne fait plus foi
 ```
 
 Le guide utilisateur decrit l'installation, l'interface, le chargement des donnees,
-le choix et le parametrage des modeles, la lecture des resultats et les exports :
-[docs/Guide_utilisateur.md](docs/Guide_utilisateur.md). Il a ete transcrit du PDF,
-dont la source Google Docs n'est pas versionnee ; c'est desormais la version a
-modifier. `docs/Guide_utilisateur.pdf` n'en est que la mise en page, regeneree par
-`bash docs/build_pdf.sh`. Son contenu a ete mis en accord avec le code : modeles
-reellement enregistres, noms actuels des parametres, nature des bandes d'incertitude
-et contenu reel des exports.
+le choix et le parametrage des modeles, la lecture des resultats et les exports.
 
-Le `Guide_utilisateur.pdf` de la racine est l'export Google Docs d'origine. Il decrit
-une version anterieure du code et n'est plus a jour : le conserver ou le supprimer
-reste a decider.
+- [docs/Guide_utilisateur.md](docs/Guide_utilisateur.md) — la reference. C'est le
+  fichier a modifier ; son contenu suit le code : modeles reellement enregistres, noms
+  actuels des parametres, nature des bandes d'incertitude, contenu reel des exports.
+- [docs/Guide_utilisateur.pdf](docs/Guide_utilisateur.pdf) — la mise en page du
+  precedent, a regenerer par `bash docs/build_pdf.sh` apres chaque modification.
+- [old/Guide_utilisateur.pdf](old/Guide_utilisateur.pdf) — l'export Google Docs
+  d'origine, conserve pour la trace. Il ne fait plus foi ; voir [old/README.md](old/README.md).
 
 ## Prerequis
 

@@ -2,7 +2,7 @@
 
 Application de prévision du trafic aérien développée en Julia.
 
-> Transcription Markdown de [`../Guide_utilisateur.pdf`](../Guide_utilisateur.pdf),
+> Transcription Markdown de [`../old/Guide_utilisateur.pdf`](../old/Guide_utilisateur.pdf),
 > exporté de Google Docs — dont la source `.docx` n'est ni dans le dépôt ni sur le Drive.
 > Le PDF ne porte ni niveau de titre ni style nommé : les niveaux sont déduits
 > de la taille des caractères, les tableaux des filets tracés, et les intitulés
