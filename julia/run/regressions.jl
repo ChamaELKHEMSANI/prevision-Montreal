@@ -281,6 +281,34 @@ end
         @test result["metrics"]["RMSE"] != 10.5
     end
 
+    @testset "K1 et K2 de la loi portent le meme nom partout" begin
+        # `parameters["k1"]` / `["k2"]` designaient les coefficients de forme "c" et "d" de
+        # la courbe, PAS les constantes K1 et K2 de la loi de Kenza, lesquelles vivaient
+        # sous `full_penetration` / `full_price_scale` puis sous des champs `calibration_*`.
+        # Trois conventions pour deux constantes : origine probable de l'erreur de
+        # KenzaProbabilisticModel, qui applique la loi avec K1 = K2 = 1.
+        full = Models.KenzaModel()
+        @test haskey(full.parameters, "kenza_k1") && haskey(full.parameters, "kenza_k2")
+        @test haskey(full.parameters, "curve_c") && haskey(full.parameters, "curve_d")
+        @test !haskey(full.parameters, "k1") && !haskey(full.parameters, "k2")
+
+        # Valeurs du classeur d'origine, feuille "Full Kenza" cellules B1/B2.
+        @test full.parameters["kenza_k2"] == 30.0
+        @test full.parameters["kenza_k1"] == 0.8193343775346827
+
+        indexed = Models.KenzaIndexedModel()
+        Abstract.fit!(indexed, data)
+        @test hasproperty(indexed, :kenza_k1) && hasproperty(indexed, :kenza_k2)
+
+        # Les anciens noms restent acceptes, et visent bien la meme constante qu'avant.
+        aliased = Models.KenzaModel()
+        Abstract.fit!(aliased, data; k1=-6.0, k2=0.5, full_penetration=0.9, full_price_scale=25.0)
+        @test aliased.parameters["curve_c"] == -6.0
+        @test aliased.parameters["curve_d"] == 0.5
+        @test aliased.parameters["kenza_k1"] == 0.9
+        @test aliased.parameters["kenza_k2"] == 25.0
+    end
+
     @testset "La provenance des intervalles est declaree, pas supposee" begin
         # L'interface intitulait "IC 95 %" une bande qui, avec les parametres par defaut des
         # cinq modeles, vaut exactement pred*0.8 .. pred*1.2. La branche calculant un vrai

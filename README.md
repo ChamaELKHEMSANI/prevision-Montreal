@@ -102,6 +102,29 @@ Les parametres par defaut et les descriptions sont dans:
 julia/config/model_metadata.json
 ```
 
+### Nom des parametres
+
+La loi de Kenza s'ecrit `D = P x K1 x F*(K2 x pn)`, ou `pn` est le prix normalise, `K2` le
+seuil de revenu normalise et `K1` une constante agregee. La courbe `F*` a par ailleurs
+quatre coefficients de forme `a`, `b`, `c`, `d`.
+
+Le code distingue explicitement les deux familles:
+
+| Parametre | Role | Valeur Excel |
+|---|---|---|
+| `kenza_k1` | constante K1 de la loi | `Full Kenza` cellule B2 = 0.8193343775346827 |
+| `kenza_k2` | seuil K2 de la loi | `Full Kenza` cellule B1 = 30 |
+| `curve_c`, `curve_d` | coefficients de forme de `F*` | `k1_c` = -6.59917386, `k2_d` = 0.39546328 |
+| `distribution_a`, `distribution_b` | coefficients de forme de `F*` | 1.1572, 4.3517429 |
+
+Pour `kenza_indexed`, K1 et K2 ne sont pas des parametres mais sont calibres sur les
+donnees; ils sont exposes par les champs `kenza_k1` et `kenza_k2` du modele ajuste.
+
+Les anciens noms `k1`, `k2`, `full_penetration` et `full_price_scale` restent acceptes en
+entree. `k1` et `k2` designaient les coefficients `c` et `d`, et non les constantes K1 et
+K2 de la loi: cette homonymie est vraisemblablement a l'origine de l'erreur du modele
+probabiliste, qui applique la loi en laissant K1 et K2 implicitement egaux a 1.
+
 ## Lancer les tests
 
 Depuis la racine du depot:

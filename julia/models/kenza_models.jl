@@ -26,12 +26,12 @@ end
 
 function KenzaModel(; name="kenza", description="Kenza model based on income distribution")
     params = Dict{String,Any}(
-        "k1" => -6.59917386,
-        "k2" => 0.39546328,
+        "curve_c" => -6.59917386,
+        "curve_d" => 0.39546328,
         "distribution_a" => 1.1572,
         "distribution_b" => 4.3517429,
-        "full_price_scale" => 30.0,
-        "full_penetration" => 0.8193343775346827,
+        "kenza_k2" => 30.0,
+        "kenza_k1" => 0.8193343775346827,
         "optimize_parameters" => false
     )
     return KenzaModel(name, description, params, false, nothing, Dict(), nothing, nothing, nothing, 1.0, Dict())
@@ -113,12 +113,7 @@ end
 
 function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     # Mise à jour des paramètres depuis kwargs
-    for (k,v) in kwargs
-        key = string(k)
-        if haskey(model.parameters, key)
-            model.parameters[key] = v
-        end
-    end
+    _update_params!(model.parameters, kwargs)
     
     model.train_data = data
     model.reference_year = data[1, "year"]
@@ -127,7 +122,7 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
     
     # Calcul du prix normalisé
     prices = _sanitize_prices(data.ticket_price, model.reference_ticket_price)
-    rho_t = _full_kenza_index(prices, data.gdp_per_capita, model.parameters["full_price_scale"])
+    rho_t = _full_kenza_index(prices, data.gdp_per_capita, model.parameters["kenza_k2"])
     
     a = Float64(model.parameters["distribution_a"])
     b = Float64(model.parameters["distribution_b"])
@@ -137,26 +132,26 @@ function AbstractModel.fit!(model::KenzaModel, data::DataFrame; kwargs...)::Bool
         actual = data.actual_passengers
         
         # Définition de la fonction objectif
-        penetration = Float64(model.parameters["full_penetration"])
+        penetration = Float64(model.parameters["kenza_k1"])
         loss(params) = _kenza_loss(params, rho_t, pop, actual, a, b, penetration)
         
         # Excel maps k1/k2 to the c/d coefficients of the Kenza curve.
         lower = [-20.0, 0.01]
         upper = [20.0, 5.0]
-        initial = [Float64(model.parameters["k1"]), Float64(model.parameters["k2"])]
+        initial = [Float64(model.parameters["curve_c"]), Float64(model.parameters["curve_d"])]
         
         # Optimisation avec L-BFGS avec bornes
         result = optimize(loss, lower, upper, initial, Fminbox(LBFGS()))
         best_k1, best_k2 = result.minimizer[1], result.minimizer[2]
-        model.parameters["k1"] = best_k1
-        model.parameters["k2"] = best_k2
-        model.optimized_params = Dict("k1"=>best_k1, "k2"=>best_k2)
+        model.parameters["curve_c"] = best_k1
+        model.parameters["curve_d"] = best_k2
+        model.optimized_params = Dict("curve_c"=>best_k1, "curve_d"=>best_k2)
     end
     
     # Calcul des prédictions sur l'entraînement
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
-                            model.parameters["k1"], model.parameters["k2"])
-    pred = model.parameters["full_penetration"] .* data.population .* F
+                            model.parameters["curve_c"], model.parameters["curve_d"])
+    pred = model.parameters["kenza_k1"] .* data.population .* F
     
     # Facteur de continuité
     model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
@@ -183,10 +178,10 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
     apply_continuity = _kw(kwargs, :apply_continuity_adjustment, true)
     future_years = collect(last_year+1 : last_year+horizon)
 
-    rho_t = _full_kenza_index(prices, gdps, model.parameters["full_price_scale"])
+    rho_t = _full_kenza_index(prices, gdps, model.parameters["kenza_k2"])
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
-                            model.parameters["k1"], model.parameters["k2"])
-    pred = model.parameters["full_penetration"] .* pops .* F
+                            model.parameters["curve_c"], model.parameters["curve_d"])
+    pred = model.parameters["kenza_k1"] .* pops .* F
     
     if apply_continuity
         pred = pred .* model.continuity_adjustment_factor
@@ -199,11 +194,11 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
     if n_sims > 0
         train_prices = _sanitize_prices(model.train_data.ticket_price, model.reference_ticket_price)
         train_rho = _full_kenza_index(train_prices, model.train_data.gdp_per_capita,
-                                      model.parameters["full_price_scale"])
+                                      model.parameters["kenza_k2"])
         train_F = _kenza_distribution(train_rho, model.parameters["distribution_a"], model.parameters["distribution_b"],
-                                      model.parameters["k1"], model.parameters["k2"])
+                                      model.parameters["curve_c"], model.parameters["curve_d"])
         residuals = model.train_data.actual_passengers .-
-                    (model.parameters["full_penetration"] .* model.train_data.population .* train_F .*
+                    (model.parameters["kenza_k1"] .* model.train_data.population .* train_F .*
                      model.continuity_adjustment_factor)
         resid_std = std(residuals)
         z = 1.96
@@ -263,12 +258,7 @@ function KenzaSimplifieModel(; name="kenza_simplifie", description="Simplified K
 end
 
 function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs...)::Bool
-    for (k,v) in kwargs
-        key = string(k)
-        if haskey(model.parameters, key)
-            model.parameters[key] = v
-        end
-    end
+    _update_params!(model.parameters, kwargs)
     
     model.train_data = data
     model.reference_gdp_per_cap = data[1, "gdp_per_capita"]
@@ -367,18 +357,19 @@ mutable struct KenzaIndexedModel <: AbstractKenzaModel
     metrics::Dict{String,Float64}
     reference_gdp_per_cap::Float64
     continuity_adjustment_factor::Float64
-    # Constantes de calage Excel (feuille 'Indexed Kenza', cellules B16/B17) — À NE PAS CONFONDRE
-    # avec parameters["k1"]/["k2"] qui sont en réalité les coefficients Excel "c"/"d" de la courbe.
-    calibration_k2::Float64   # Excel B16 : seuil normalisé calé sur l'élasticité de référence
-    calibration_k1::Float64   # Excel B17 : échelle calée sur le trafic normalisé de l'année de référence
+    # K1 et K2 de la loi de Kenza (feuille 'Indexed Kenza', cellules B16/B17), calibrees
+    # sur les donnees. Les coefficients de forme de la courbe sont parameters["curve_c"] /
+    # ["curve_d"].
+    kenza_k2::Float64   # Excel B16 : seuil normalisé calé sur l'élasticité de référence
+    kenza_k1::Float64   # Excel B17 : échelle calée sur le trafic normalisé de l'année de référence
     last_implied_t::Float64   # Excel colonne T/W : dernier indice de prix implicite observé (historique)
 end
 
 function KenzaIndexedModel(; name="kenza_indexed", description="Indexed Kenza: logistic model without direct ticket price")
     params = Dict{String,Any}(
         # a,b,c,d de la courbe Kenza (identiques à Full Kenza : même lookup Ref pour le flux régional)
-        "k1" => -6.59917386,          # coefficient Excel "c"
-        "k2" => 0.39546328,           # coefficient Excel "d"
+        "curve_c" => -6.59917386,
+        "curve_d" => 0.39546328,
         "distribution_a" => 1.1572,
         "distribution_b" => 4.3517429,
         # Année/valeurs de référence Excel (feuille 'Indexed Kenza', cellules B2/B4/B5/B10) :
@@ -450,8 +441,8 @@ function KenzaProbabilisticModel(; name="kenza_probabilistic",
                                  n_simulations=1000,
                                  bootstrap_type=:parametric)
     params = Dict{String,Any}(
-        "k1" => -6.59917386,
-        "k2" => 0.39546328,
+        "curve_c" => -6.59917386,
+        "curve_d" => 0.39546328,
         "distribution_a" => 1.1572,
         "distribution_b" => 4.3517429,
         "optimize_parameters" => false,
@@ -465,12 +456,7 @@ function KenzaProbabilisticModel(; name="kenza_probabilistic",
 end
 
 function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwargs...)::Bool
-    for (k,v) in kwargs
-        key = string(k)
-        if haskey(model.parameters, key)
-            model.parameters[key] = v
-        end
-    end
+    _update_params!(model.parameters, kwargs)
     
     model.train_data = data
     reference_year = data[1, "year"]
@@ -489,8 +475,8 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     # constant. On court-circuite la boucle ; l'incertitude vient alors des residus seuls,
     # ce que `param_bootstrap` signale explicitement.
     if !model.parameters["optimize_parameters"]
-        k1_samples = fill(Float64(model.parameters["k1"]), n_sim)
-        k2_samples = fill(Float64(model.parameters["k2"]), n_sim)
+        k1_samples = fill(Float64(model.parameters["curve_c"]), n_sim)
+        k2_samples = fill(Float64(model.parameters["curve_d"]), n_sim)
     end
 
     for b in (isempty(k1_samples) ? (1:n_sim) : (1:0))
@@ -504,8 +490,8 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
             pop = boot_data.population
             actual = boot_data.actual_passengers
             best_error = Inf
-            best_k1 = Float64(model.parameters["k1"])
-            best_k2 = Float64(model.parameters["k2"])
+            best_k1 = Float64(model.parameters["curve_c"])
+            best_k2 = Float64(model.parameters["curve_d"])
             
             for k1 in range(-20.0, 20.0, length=41), k2 in range(0.05, 5.0, length=30)
                 F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"], k1, k2)
@@ -518,8 +504,8 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
                 end
             end
         else
-            best_k1 = model.parameters["k1"]
-            best_k2 = model.parameters["k2"]
+            best_k1 = model.parameters["curve_c"]
+            best_k2 = model.parameters["curve_d"]
         end
         
         push!(k1_samples, best_k1)
@@ -527,23 +513,23 @@ function AbstractModel.fit!(model::KenzaProbabilisticModel, data::DataFrame; kwa
     end
     
     model.param_distribution = Dict(
-        "k1" => k1_samples,
-        "k2" => k2_samples,
-        "k1_mean" => mean(k1_samples),
-        "k1_std" => std(k1_samples),
-        "k2_mean" => mean(k2_samples),
-        "k2_std" => std(k2_samples)
+        "curve_c" => k1_samples,
+        "curve_d" => k2_samples,
+        "curve_c_mean" => mean(k1_samples),
+        "curve_c_std" => std(k1_samples),
+        "curve_d_mean" => mean(k2_samples),
+        "curve_d_std" => std(k2_samples)
     )
     
     model.param_distribution["param_bootstrap"] = model.parameters["optimize_parameters"]
 
-    model.parameters["k1"] = mean(k1_samples)
-    model.parameters["k2"] = mean(k2_samples)
+    model.parameters["curve_c"] = mean(k1_samples)
+    model.parameters["curve_d"] = mean(k2_samples)
     
     T_t = _sanitize_prices(data.ticket_price, reference_ticket_price) ./ reference_ticket_price
     rho_t = _normalized_price(T_t, data.gdp_per_capita, reference_gdp_per_cap)
     F = _kenza_distribution(rho_t, model.parameters["distribution_a"], model.parameters["distribution_b"],
-                            model.parameters["k1"], model.parameters["k2"])
+                            model.parameters["curve_c"], model.parameters["curve_d"])
     pred = data.population .* F
     
     model.continuity_adjustment_factor = _recent_continuity_factor(data.actual_passengers, pred)
@@ -563,8 +549,8 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
         error("Model not fitted")
     end
     
-    k1_samples = model.param_distribution["k1"]
-    k2_samples = model.param_distribution["k2"]
+    k1_samples = model.param_distribution["curve_c"]
+    k2_samples = model.param_distribution["curve_d"]
     residuals = get(model.param_distribution, "residuals", Float64[])
     n_sim = length(k1_samples)
     
@@ -695,8 +681,8 @@ function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...
 
     a = Float64(model.parameters["distribution_a"])
     b = Float64(model.parameters["distribution_b"])
-    c = Float64(model.parameters["k1"])
-    d = Float64(model.parameters["k2"])
+    c = Float64(model.parameters["curve_c"])
+    d = Float64(model.parameters["curve_d"])
 
     ref_idx = 1
     if haskey(model.parameters, "ref_year") && Int(model.parameters["ref_year"]) > 0
@@ -717,8 +703,8 @@ function AbstractModel.fit!(model::KenzaIndexedModel, data::DataFrame; kwargs...
     k2 = _solve_threshold_for_elasticity(ref_elasticity, a, b, c, d)
     Fk2 = _kenza_distribution(k2, a, b, c, d)
     k1 = ref_norm_pax / max(Fk2, 1e-12)
-    model.calibration_k2 = k2
-    model.calibration_k1 = k1
+    model.kenza_k2 = k2
+    model.kenza_k1 = k1
 
     S = ref_gdp ./ max.(Float64.(data.gdp_per_capita), 1e-10)
     P = Float64.(data.actual_passengers) ./ max.(Float64.(data.population), 1e-10)
@@ -757,15 +743,15 @@ function AbstractModel.predict(model::KenzaIndexedModel, horizon::Int; kwargs...
 
     a = Float64(model.parameters["distribution_a"])
     b = Float64(model.parameters["distribution_b"])
-    c = Float64(model.parameters["k1"])
-    d = Float64(model.parameters["k2"])
+    c = Float64(model.parameters["curve_c"])
+    d = Float64(model.parameters["curve_d"])
 
     fare_growth = Float64(_kw(kwargs, :fare_growth_rate, model.parameters["fare_growth_rate"]))
     t_future = model.last_implied_t .* (1.0 .+ fare_growth) .^ (1:horizon)
     s_future = model.reference_gdp_per_cap ./ max.(Float64.(gdps), 1e-10)
 
-    F = _kenza_distribution(model.calibration_k2 .* t_future .* s_future, a, b, c, d)
-    pred = model.calibration_k1 .* pops .* F
+    F = _kenza_distribution(model.kenza_k2 .* t_future .* s_future, a, b, c, d)
+    pred = model.kenza_k1 .* pops .* F
 
     return _forecast_df(last_year, pops, gdps, prices, pred;
                         training_df=model.train_data,
@@ -822,9 +808,29 @@ function AbstractModel.predict(model::KenzaSimplifieCombineModel, horizon::Int; 
                         training_df=model.train_data, apply_continuity=apply_continuity)
 end
 
+"""
+Anciens noms de parametres, acceptes pour ne pas casser les appels existants.
+
+`k1` et `k2` designaient les coefficients de forme "c" et "d" de la courbe de Kenza, PAS
+les constantes K1 et K2 de la loi — lesquelles vivaient sous `full_penetration` et
+`full_price_scale` pour Full Kenza, et sous des champs `calibration_*` pour Indexed Kenza.
+Trois conventions pour deux constantes : c'est tres probablement l'origine de l'erreur de
+KenzaProbabilisticModel, qui applique la loi en laissant K1 et K2 implicitement a 1.
+"""
+const _PARAM_ALIASES = Dict(
+    "k1" => "curve_c",
+    "k2" => "curve_d",
+    "k1_c" => "curve_c",
+    "k2_d" => "curve_d",
+    "full_penetration" => "kenza_k1",
+    "full_price_scale" => "kenza_k2",
+)
+
+_canonical_param(name) = get(_PARAM_ALIASES, string(name), string(name))
+
 function _update_params!(parameters::Dict{String,Any}, kwargs)
     for (k, v) in kwargs
-        key = string(k)
+        key = _canonical_param(k)
         if haskey(parameters, key)
             parameters[key] = v
         end
@@ -979,7 +985,7 @@ end
 _proxy_or_ticket_price(model, data::DataFrame) = data.ticket_price
 
 # `penetration` doit refleter exactement ce que predit le modele. Sans lui, l'optimiseur
-# minimisait la SSE de `pop .* F` alors que KenzaModel predit `full_penetration .* pop .* F`
+# minimisait la SSE de `pop .* F` alors que KenzaModel predit `kenza_k1 .* pop .* F`
 # (SSE 1.5x differente sur data/sample.csv) : les k1/k2 retenus n'etaient donc pas optimaux
 # pour le modele reellement utilise.
 function _kenza_loss(params, rho, pop, actual, a, b, penetration::Real=1.0)
