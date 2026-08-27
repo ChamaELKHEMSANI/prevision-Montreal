@@ -370,6 +370,22 @@ end
         @test_throws ErrorException macro_series(src, "FRA", nothing, false)
     end
 
+    @testset "Le regroupement par ville reunit les aeroports d'une meme RMR" begin
+        include(joinpath(JULIA_ROOT, "run", "extract_city_pairs.jl"))
+        popfile = joinpath(mktempdir(), "pop.csv")
+        CSV.write(popfile, DataFrame(
+            year = fill(2019, 4), airport = ["YUL", "YYZ", "YTZ", "YVR"],
+            cma = ["Montréal (CMA), Quebec", "Toronto (CMA), Ontario",
+                   "Toronto (CMA), Ontario", "Vancouver (CMA), British Columbia"],
+            population = [4.3e6, 6.5e6, 6.5e6, 2.7e6]); delim = ';')
+
+        groups = city_groups(popfile)
+        # YYZ et YTZ desservent la meme RMR : ils partagent un representant unique.
+        @test groups["YYZ"] == groups["YTZ"]
+        @test groups["YUL"] != groups["YYZ"]
+        @test groups["YVR"] == "YVR"
+    end
+
     @testset "La jointure de population somme les deux extremites" begin
         include(joinpath(JULIA_ROOT, "run", "extract_city_pairs.jl"))
         pairs = DataFrame(year = [2019, 2019, 2019], origin = ["YUL", "YUL", "YUL"],

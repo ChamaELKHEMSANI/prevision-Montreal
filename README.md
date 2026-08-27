@@ -273,6 +273,23 @@ Deux limites a connaitre:
   Verifie: origines et destinations y sont a 100 % "US", et ni YUL ni YYZ n'y figurent.
   Elle ne peut pas servir pour un flux canadien.
 
+### Regrouper les aeroports d'une meme ville
+
+`--group-by-city` reunit, avant agregation, les aeroports desservant la meme RMR, d'apres
+la colonne `cma` du fichier `--population`.
+
+Ce n'est pas cosmetique. Sur Montreal-Toronto, de 2007 a 2019:
+
+| serie | evolution |
+|---|---|
+| YYZ seul | -34.8 % |
+| YTZ seul | +143 % |
+| marche reuni | -13.6 % |
+
+L'ouverture de Porter a Billy Bishop en 2007 fait passer YTZ de 17 a 255 673 passagers.
+Scinder le marche produit deux series dominees par cette substitution, qu'aucun modele
+pilote par la population et le revenu ne peut representer.
+
 ### Evaluer une paire
 
 `run/evaluate_pair.jl` ajuste les modeles sur une paire et rapporte leur performance hors
