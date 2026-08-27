@@ -9,6 +9,11 @@ Application de prévision du trafic aérien développée en Julia.
 > isolés (« Description », « Limites »…) sont mis en gras faute d'autre marque
 > dans la source. Les numéros de page du sommaire imprimé sont remplacés par
 > des ancres.
+>
+> Le fond a ensuite été **corrigé pour correspondre au code** : modèles réellement
+> enregistrés, noms actuels des paramètres, nature des bandes d'incertitude, contenu réel des
+> exports et contrôles réellement appliqués au chargement. Les passages concernés le disent
+> explicitement.
 
 ## Sommaire
 
@@ -31,7 +36,7 @@ Application de prévision du trafic aérien développée en Julia.
   - [4.2 Structure attendue des données](#42-structure-attendue-des-données)
   - [4.3 Procédure de chargement](#43-procédure-de-chargement)
   - [4.4 Sélection de la période d’entraînement](#44-sélection-de-la-période-dentraînement)
-  - [4.5 Nettoyage automatique des données](#45-nettoyage-automatique-des-données)
+  - [4.5 Contrôles appliqués au chargement](#45-contrôles-appliqués-au-chargement)
   - [4.6 En résumé](#46-en-résumé)
 - [5. Choix du modèle](#5-choix-du-modèle)
   - [5.1 Présentation des modèles disponibles](#51-présentation-des-modèles-disponibles)
@@ -55,7 +60,7 @@ Application de prévision du trafic aérien développée en Julia.
   - [8.1 Onglet « Modèle unique » : lecture détaillée](#81-onglet--modèle-unique---lecture-détaillée)
   - [8.2 Onglet « Comparaison » : lecture du tableau et du graphique](#82-onglet--comparaison---lecture-du-tableau-et-du-graphique)
   - [8.3 Indicateurs de continuité (diagnostic)](#83-indicateurs-de-continuité-diagnostic)
-  - [8.4 Intervalles de confiance - comprendre l’incertitude](#84-intervalles-de-confiance---comprendre-lincertitude)
+  - [8.4 Intervalles - comprendre ce que mesure la bande](#84-intervalles---comprendre-ce-que-mesure-la-bande)
   - [8.5 Synthèse et prise de décision](#85-synthèse-et-prise-de-décision)
   - [8.6 En résumé](#86-en-résumé)
 - [9. Export des résultats](#9-export-des-résultats)
@@ -63,7 +68,7 @@ Application de prévision du trafic aérien développée en Julia.
   - [9.2 Export au format CSV](#92-export-au-format-csv)
   - [9.3 Export au format Excel](#93-export-au-format-excel)
   - [9.4 Export au format PDF](#94-export-au-format-pdf)
-  - [9.5 Export du graphique seul (via le PDF)](#95-export-du-graphique-seul-via-le-pdf)
+  - [9.5 Récupérer le graphique dans un autre format](#95-récupérer-le-graphique-dans-un-autre-format)
   - [9.6 Conseils et bonnes pratiques](#96-conseils-et-bonnes-pratiques)
   - [9.7 Que faire si l’export échoue ?](#97-que-faire-si-lexport-échoue-)
   - [9.8 En résumé](#98-en-résumé)
@@ -103,7 +108,7 @@ AirTrafficForecaster est une plateforme de prévision du trafic aérien dévelop
 L’application permet de :
 
 - charger vos propres données historiques (au format CSV ou Excel) ;
-- choisir parmi plusieurs variantes du modèle Kenza (linéaire, indexée, probabiliste, etc.) ;
+- choisir parmi cinq variantes du modèle Kenza (complète, linéaire, combinée, indexées) ;
 - ajuster les paramètres du modèle ou les laisser par défaut ;
 - lancer une prévision sur un horizon personnalisé ;
 - comparer les performances de plusieurs modèles sur un même jeu de données ;
@@ -115,39 +120,27 @@ L’outil a été conçu pour être à la fois pédagogique et opérationnel. Il
 
 **Fonctionnalité - Chargement de données**
 
-Description : Import de fichiers CSV ou Excel, avec validation automatique des colonnes et
-
-nettoyage des valeurs aberrantes.
+Description : Import de fichiers CSV ou Excel, avec validation automatique des colonnes et nettoyage des valeurs aberrantes.
 
 **Fonctionnalité - Modèles Kenza**
 
-Description : Sélection parmi plusieurs modèles (complet, simplifié, indexé, combiné,
-
-probabiliste). Chaque modèle est décrit avec ses paramètres et son domaine de pertinence.
+Description : Sélection parmi cinq modèles (complet, simplifié, combiné, et deux variantes indexées). Chaque modèle est décrit avec ses paramètres et son domaine de pertinence.
 
 **Fonctionnalité - Paramétrage interactif**
 
-Description : Modification des paramètres via des contrôles graphiques (cases à cocher,
-
-curseurs, champs de texte) ou en édition JSON directe.
+Description : Modification des paramètres via des contrôles graphiques (cases à cocher, curseurs, champs de texte) ou en édition JSON directe.
 
 **Fonctionnalité - Prévision unique**
 
-Description : Calibration sur la période d’entraînement choisie, génération d’une prévision avec
-
-intervalle de confiance, affichage des métriques de performance.
+Description : Calibration sur la période d’entraînement choisie, génération d’une prévision avec intervalle de confiance, affichage des métriques de performance.
 
 **Fonctionnalité - Comparaison de modèles**
 
-Description : Sélection simultanée de plusieurs modèles ; tableau comparatif des métriques et
-
-graphique superposé.
+Description : Sélection simultanée de plusieurs modèles ; tableau comparatif des métriques et graphique superposé.
 
 **Fonctionnalité - Export**
 
-Description : Sauvegarde des prévisions en CSV, Excel (multi-onglets) ou PDF (rapport structuré
-
-avec graphique et diagnostics).
+Description : Sauvegarde des prévisions en CSV, Excel (multi-onglets) ou PDF (rapport structuré avec graphique et diagnostics).
 
 ## 2. Installation et lancement
 
@@ -159,9 +152,7 @@ Avant de commencer, assurez-vous que votre machine répond aux prérequis suivan
 
 **Élément - Système d’exploitation**
 
-Exigence : Windows 10/11, macOS 9.15 (Catalina) ou supérieur, ou une distribution Linux récente
-
-(Ubuntu 20.04+, Debian 11+, etc.)
+Exigence : Windows 10/11, macOS 9.15 (Catalina) ou supérieur, ou une distribution Linux récente (Ubuntu 20.04+, Debian 11+, etc.)
 
 **Élément - Julia**
 
@@ -177,9 +168,7 @@ Exigence : 4 Go minimum
 
 **Élément - Réseau**
 
-Exigence : Connexion Internet nécessaire pour la première installation (téléchargement des
-
-dépendances)
+Exigence : Connexion Internet nécessaire pour la première installation (téléchargement des dépendances)
 
 Remarque pour Linux : L’interface graphique utilise GTK3. Si vous rencontrez des problèmes à l’ouverture, installez les bibliothèques système avec la commande sudo apt install libgtk-3-dev (Ubuntu/Debian) ou l’équivalent pour votre distribution. Sur Windows et macOS, `Gtk.jl` télécharge automatiquement les dépendances nécessaires.
 
@@ -391,9 +380,7 @@ Le panneau droit est organisé en deux onglets accessibles par des clics sur leu
 
 Cet onglet s’affiche par défaut et contient trois parties :
 
-1. Indicateurs de performance (en haut) : une zone de texte qui liste les métriques du modèle
-
-calibré :
+1. Indicateurs de performance (en haut) : une zone de texte qui liste les métriques du modèle calibré :
 
   - RMSE (erreur quadratique moyenne)
   - MAE (erreur absolue moyenne)
@@ -411,11 +398,7 @@ calibré :
 
 Cet onglet s’active lorsque vous souhaitez confronter plusieurs modèles. Il contient :
 
-1. Tableau comparatif des métriques (en haut) : un tableau texte avec une ligne par modèle et
-
-des colonnes pour RMSE, MAE, R² et MAPE. Cela permet de repérer rapidement le modèle le
-
-plus performant.
+1. Tableau comparatif des métriques (en haut) : un tableau texte avec une ligne par modèle et des colonnes pour RMSE, MAE, R² et MAPE. Cela permet de repérer rapidement le modèle le plus performant.
 
 2. Graphique superposé (au centre) :
 
@@ -621,45 +604,69 @@ Période recommandée : Les 5 à 10 dernières années (pour capter les tendance
 
 **Objectif - Test de robustesse**
 
-Période recommandée : Comparer les résultats avec une période « normale » et une période «
-
-avec crise » (ex. exclure 2020).
+Période recommandée : Comparer les résultats avec une période « normale » et une période « avec crise » (ex. exclure 2020).
 
 Conseil : si vous modifiez la période après avoir déjà lancé une prévision, relancez le calcul : les métriques et le graphique seront mis à jour pour refléter la nouvelle plage d’entraînement.
 
-### 4.5 Nettoyage automatique des données
+### 4.5 Contrôles appliqués au chargement
 
-Pour vous faciliter la tâche, l’application applique automatiquement plusieurs traitements de nettoyage lors du chargement. Vous n’avez rien à faire : tout est transparent.
+L'application ne modifie pas vos données. Elle les normalise, les contrôle, et **refuse le
+fichier** si un défaut bloquant est détecté. Aucune valeur n'est inventée à votre place.
 
 #### 4.5.1 Normalisation des noms de colonnes
 
-Les noms de colonnes sont convertis en minuscules, les accents supprimés, et les synonymes sont harmonisés (ex. « PIB/hab » → « `gdp_per_capita` »). Cela évite les erreurs de saisie.
+Les noms sont mis en minuscules, débarrassés des espaces de début et de fin, puis traduits
+selon une table de synonymes :
 
-#### 4.5.2 Traitement des valeurs manquantes
+| Vous écrivez | L'application retient |
+| --- | --- |
+| `year`, `annee`, `date`, `t` | `year` |
+| `passagers`, `passengers`, `traffic`, `volume`, `y` | `actual_passengers` |
+| `population`, `pop`, `pop_total` | `population` |
+| `gdp`, `pib`, `income` | `gdp_per_capita` |
+| `price`, `prix`, `fare` | `ticket_price` |
 
-Si une valeur est absente (case vide dans le fichier), l’application la remplace :
+Les accents ne sont **pas** supprimés : `année` n'est pas reconnu, `annee` l'est. Si deux
+colonnes aboutissent au même nom, la seconde reçoit un suffixe (`population_2`).
 
-- Pour les colonnes numériques : par la médiane de la colonne (valeur centrale, robuste aux outliers).
-- Pour les colonnes textuelles : par le mode (valeur la plus fréquente).
+#### 4.5.2 Conversion du type de l'année
 
-Cela permet de conserver un jeu de données complet sans planter.
+Si la colonne `year` contient des nombres entiers écrits comme des décimaux (2005.0), elle
+est convertie en entiers. La conversion est abandonnée sans bruit si une valeur manque ou
+n'est pas un entier — le contrôle suivant signalera alors le problème.
 
-#### 4.5.3 Détection et écrêtement des valeurs aberrantes (outliers)
+#### 4.5.3 Contrôles bloquants
 
-L’application calcule automatiquement les quartiles (1er et 3ème) pour chaque colonne numérique. Toute valeur située au-delà de 1,5 fois l’écart interquartile (IQR) est considérée comme aberrante et est ramenée à la borne (inférieure ou supérieure). Cela évite qu’une anomalie ponctuelle fausse la calibration du modèle.
+Le fichier est **refusé**, avec un message nommant la colonne en cause, dans ces cas :
 
-#### 4.5.4 Suppression des doublons
+- une colonne obligatoire manque (`year` ou `actual_passengers`) ;
+- `year` ou `actual_passengers` comporte au moins une valeur vide ;
+- `year` contient autre chose que des entiers ;
+- une même année apparaît deux fois ;
+- un nombre de passagers est négatif.
 
-Si plusieurs lignes ont exactement les mêmes valeurs dans toutes les colonnes, seules les lignes uniques sont conservées. Les doublons sont supprimés silencieusement.
+Une valeur manquante dans `actual_passengers` est bloquante et non comblée : le modèle
+n'aurait aucun moyen honnête de deviner un trafic non observé.
 
-#### 4.5.5 Alertes et avertissements
+#### 4.5.4 Avertissements non bloquants
 
-Certains problèmes ne sont pas bloquants mais méritent votre attention. Ils apparaissent sous forme d’avertissements dans la barre de statut ou dans la zone de métriques :
+Les valeurs extrêmes sont **signalées, jamais corrigées**. Une colonne dont des valeurs
+sortent de l'intervalle [Q1 − 3×IQR ; Q3 + 3×IQR] produit un avertissement du type
+« Column '`ticket_price`' has 3 potential outliers ». La colonne `year` en est exemptée :
+elle est monotone par construction. `actual_passengers` **n'en est pas exemptée**, mais ses
+valeurs ne sont pas écrêtées pour autant : les chocs de 2009 et 2020 sont des faits que le
+modèle doit reproduire, pas des anomalies de saisie.
 
-- « Column '`ticket_price`' has 3 potential outliers » - signale la présence de valeurs extrêmes qui ont été écrêtées.
-- « Year column converted to integer » - les années ont été converties automatiquement en nombres entiers.
+Ces avertissements figurent dans le rapport de validation. L'interface graphique n'affiche
+aujourd'hui que les messages bloquants dans la barre d'état.
 
-Vous pouvez consulter ces avertissements et, si nécessaire, corriger vos données sources pour une meilleure précision.
+#### 4.5.5 Ce qui n'est pas fait
+
+Contrairement à ce que l'on pourrait attendre, l'application **ne** remplace **pas** les
+valeurs manquantes par la médiane, **n**'écrête **pas** les valeurs aberrantes et **ne**
+supprime **pas** les lignes en double. Une fonction `clean_data` faisant tout cela existe
+bien dans `julia/services/data_service.jl`, mais aucun appelant ne l'utilise : elle n'a
+jamais d'effet sur vos données. Corrigez vos fichiers à la source.
 
 ### 4.6 En résumé
 
@@ -693,7 +700,7 @@ Le cœur de l’application réside dans le choix du modèle de prévision. Chaq
 
 ### 5.1 Présentation des modèles disponibles
 
-L’application propose six modèles principaux, tous accessibles depuis l’interface. Le tableau ci-dessous résume leurs caractéristiques pour vous aider à faire un premier choix.
+L’application propose cinq modèles, tous accessibles depuis l’interface. Le tableau ci-dessous résume leurs caractéristiques pour vous aider à faire un premier choix.
 
 | Nom affiché | Clé technique | Type | Variables nécessaires | Idéal pour… |
 | --- | --- | --- | --- | --- |
@@ -702,7 +709,15 @@ L’application propose six modèles principaux, tous accessibles depuis l’int
 | Kenza Simplifie Combine | kenza_simplifie_combine | Linéaire mixte (tendance + élasticité) | population, PIB/hab., prix du billet | Compromis entre tendance historique et sensibilité économique. |
 | Kenza Simplifie Indexe | kenza_simplifie_indexe | Linéaire indexée | population, PIB/hab. (pas de prix) | Cas où le prix du billet est indisponible ou peu fiable. |
 | Kenza Indexed | kenza_indexed | indexée | population, PIB/hab. (pas de prix) | Version non-linéaire sans prix, plus proche de l’esprit Kenza original. |
-| Kenza Probabiliste | kenza_probabilistic | avec bootstrap | population, PIB/hab., prix du billet | Quantification de l’incertitude par simulation (intervalles de confiance). |
+
+> **`kenza_probabilistic` n'est pas disponible.** Le code du modèle existe dans
+> `julia/models/kenza_models.jl`, mais il n'est volontairement pas enregistré dans le
+> registre : il n'apparaît donc ni dans la liste déroulante, ni dans la comparaison, ni
+> dans `run/test.jl`. En l'état il emprunte l'indice normalisé de Kenza Indexed sans en
+> calibrer les deux constantes, ce qui fausse son niveau d'un facteur 0,24 à 2,4 selon le
+> jeu de données ; son bootstrap de paramètres reste par ailleurs inerte tant que
+> `optimize_parameters` vaut `false`, c'est-à-dire par défaut. Le remettre en service
+> suppose d'abord de calibrer son facteur d'échelle.
 
 Conseil : si vous débutez, commencez par Kenza Simplifie : il est rapide, interprétable et donne de bons résultats sur des horizons moyens. Puis explorez les autres modèles pour affiner votre analyse.
 
@@ -823,9 +838,9 @@ Raison : Fonctionne sans prix, en utilisant l’évolution du PIB comme proxy.
 
 **Votre situation - Vous voulez mesurer l’incertitude de votre prévision (fourchette haute/basse).**
 
-**Modèle recommandé : Kenza Probabiliste**
+**Modèle recommandé : Kenza Econometric, avec `monte_carlo_simulations` > 0**
 
-Raison : Génère des intervalles de confiance par bootstrap.
+Raison : c'est la seule combinaison qui produise autre chose que le forfait ±20 % — un intervalle à 95 % fondé sur l'écart-type des résidus d'ajustement (voir § 8.4). Les autres modèles ne proposent que le forfait, dont la largeur ne mesure aucune incertitude.
 
 **Votre situation - Vous hésitez entre la tendance historique et l’effet prix.**
 
@@ -843,7 +858,7 @@ Chaque modèle Kenza possède ses propres paramètres qui influencent la calibra
 
 Les paramètres sont affichés dans une zone défilante (scrolled window) située dans le panneau de gauche, sous l’étiquette « Paramètres du modèle » (ou « Paramètres de [nom du modèle] » selon le contexte). Chaque paramètre est présenté sur une ligne avec :
 
-- à gauche, son nom (ex. k1, `optimize_parameters`, `gdp_growth_rate`) ;
+- à gauche, son nom (ex. `curve_c`, `optimize_parameters`, `gdp_growth_rate`) ;
 - à droite, un contrôle interactif adapté à son type de données.
 
 #### 6.1.2 Types de contrôles générés automatiquement
@@ -856,7 +871,7 @@ L’application analyse le type de chaque paramètre et lui associe le widget le
 | --- | --- | --- |
 | Booléen (vrai/faux) | Case à cocher | optimize_parameters |
 | Nombre entier | Champ numérique avec flèches (spin button) | monte_carlo_simulations |
-| Nombre décimal | Champ numérique avec flèches (précision 0,01) | k1, k2, gdp_growth_rate |
+| Nombre décimal | Champ numérique avec flèches | `curve_c`, `curve_d`, `gdp_growth_rate` |
 | Chaîne de caractères | Zone de texte simple | - (peu fréquent) |
 | Objet JSON / tableau | Zone de texte multiligne | - (pour extensions avancées) |
 
@@ -874,6 +889,13 @@ Cette génération automatique vous garantit que vous saisissez toujours des val
   - Champ numérique : cliquez dans le champ et tapez une nouvelle valeur, ou utilisez les flèches haut/bas pour l’incrémenter/décrémenter.
   - Zone de texte : cliquez dans la zone, effacez le contenu et tapez votre texte. 4. La modification est prise en compte immédiatement : vous n’avez pas besoin d’enregistrer. Dès que vous modifiez un contrôle, la nouvelle valeur est stockée en mémoire. 5. Lancer la prévision : une fois vos paramètres ajustés, cliquez sur « Lancer le modèle » (ou « Lancer la comparaison ») pour appliquer les changements.
 
+> **Précision des champs numériques.** Les champs décimaux affichent huit décimales. Les
+> versions antérieures n'en affichaient que deux, et le widget réinjectait sa valeur affichée
+> dès qu'il perdait le focus : `curve_d` = 0,39546328 devenait 0,4 et `kenza_k1` =
+> 0,8193343775346827 devenait 0,82, silencieusement, dès qu'on cliquait dans le champ. Si vous
+> utilisez une copie ancienne du projet, saisissez ces constantes en éditant le fichier de
+> métadonnées plutôt que par l'interface.
+
 #### 6.2.2 Cas particulier : les paramètres JSON complexes
 
 Certains paramètres (rares) peuvent être des objets ou des listes. Ils apparaissent sous forme d’une zone de texte multiligne contenant une représentation JSON (ex. {"option1": true, "option2": 5}). Pour les modifier :
@@ -890,9 +912,10 @@ Voici les paramètres les plus importants que vous rencontrerez fréquemment, av
 #### 6.3.1 optimize_parameters (booléen)
 
 - Présent dans : presque tous les modèles.
-- Fonction : si activé (true), l’application recalibre automatiquement certains coefficients clés (ex. k1, k2, C1, C2) sur la période d’entraînement par moindres carrés.
+- Fonction : si activé (`true`), l’application recalibre automatiquement certains coefficients clés (`curve_c` et `curve_d` pour `kenza`, `C1` et `C2` pour les variantes simplifiées) sur la période d’entraînement par moindres carrés.
+- Valeur par défaut : `false` dans **tous** les modèles. C'est cette valeur qui reproduit le classeur Excel de référence ; l'activer fait diverger la prévision de la parité validée par `run/validate.jl`.
 - Recommandation :
-  - Laissez-le activé (coché) si vous faites confiance à vos données historiques et souhaitez un ajustement optimal.
+  - Activez-le (cochez) si vous faites confiance à vos données historiques et souhaitez un ajustement optimal.
   - Désactivez-le si vous voulez imposer des valeurs spécifiques (ex. reprendre des coefficients issus d’une étude antérieure).
 - Impact : activé, la prévision sera plus fidèle à l’historique ; désactivé, vous gardez le contrôle total.
 
@@ -901,39 +924,64 @@ Voici les paramètres les plus importants que vous rencontrerez fréquemment, av
 - `gdp_growth_rate` (décimal, défaut 0,03) : taux de croissance annuel du PIB par habitant pour les années futures (3 % par défaut).
 - `population_growth_rate` (décimal, défaut 0,01) : taux de croissance annuel de la population (1 % par défaut).
 - `ticket_price_inflation` (décimal, défaut 0,02) : taux d’inflation annuel du prix du billet (2 % par défaut).
-- Où les trouver : ces paramètres sont disponibles dans la plupart des modèles (sauf les versions indexées qui n’utilisent pas le prix).
+- Où les trouver : `kenza_simplifie` et `kenza_simplifie_combine` exposent les trois ; `kenza_simplifie_indexe` expose les deux premiers ; `kenza_indexed` remplace le troisième par `fare_growth_rate` (défaut 0). `kenza` n'en expose aucun dans le panneau, mais les utilise tout de même pour projeter ses variables : il applique alors les valeurs par défaut ci-dessus.
 - Impact : ils déterminent l’évolution des variables explicatives dans le futur. Une hausse du `gdp_growth_rate` augmente mécaniquement la demande projetée ; une hausse de `ticket_price_inflation` la diminue (toutes choses égales par ailleurs).
 - Conseil : ajustez ces valeurs selon vos propres scénarios économiques (ex. 2 % pour une croissance modérée, 4 % pour un scénario optimiste).
 
 #### 6.3.3 trend_weight (décimal entre 0 et 1, défaut 0,5)
 
-- Présent dans : `kenza_simplifie_combine`.
+- Présent dans : `kenza_simplifie_combine` uniquement. `kenza` porte lui aussi un paramètre nommé `trend_weight` (défaut 1), mais **aucun code ne le lit** : le modifier n'a aucun effet sur `kenza`.
 - Fonction : pondère la composante « tendance historique » par rapport à la composante « élasticité prix/PIB ».
   - `trend_weight` = 1 → la prévision ne suit que la tendance passée (le prix/PIB n’a pas d’influence).
   - `trend_weight` = 0 → la prévision ne suit que l’élasticité prix/PIB (la tendance temporelle est ignorée).
   - `trend_weight` = 0,5 → les deux composantes sont équilibrées.
 - Impact : plus la valeur est proche de 1, plus la prévision prolonge la tendance linéaire historique ; plus elle est proche de 0, plus elle réagit aux variations du prix relatif.
 
-#### 6.3.4 full_penetration (décimal, défaut ~0,82)
+#### 6.3.4 Les deux familles de constantes : `kenza_k1`/`kenza_k2` et `curve_c`/`curve_d`
 
-- Présent dans : `kenza` et `kenza_indexed`.
-- Fonction : facteur multiplicatif appliqué à la population pour obtenir la demande maximale théorique. Il représente la part maximale de la population qui pourrait prendre l’avion (en conditions idéales).
-- Impact : une valeur plus élevée augmente toutes les prévisions proportionnellement. Par défaut, elle est calibrée sur les données d’exemple.
-- Conseil : sauf si vous avez une bonne raison, laissez la valeur par défaut (calibrée sur un marché mature).
+Ces quatre paramètres portaient autrefois des noms prêtant à confusion — `full_penetration`,
+`full_price_scale`, `k1`, `k2` — les deux derniers désignant la courbe alors que la loi de
+Kenza appelle K1 et K2 deux tout autres coefficients. Les noms actuels lèvent l'ambiguïté.
 
-#### 6.3.5 k1 et k2 (décimaux)
+La loi s'écrit :
 
-- Présent dans : `kenza` et `kenza_indexed`.
-- Fonction : paramètres de la courbe de distribution des revenus (k1 : niveau global, k2 : sensibilité).
-- Impact : ils influencent la forme de la courbe de pénétration. Avec `optimize_parameters` = true, ils sont automatiquement recalculés ; avec false, ils restent fixes.
-- Conseil : en général, laissez `optimize_parameters` = true et ne touchez pas à k1/k2 manuellement.
+```text
+D = P × K1 × F*(K2 × pn)          F*(r) = a × (1 − 1 / (1 + exp(b + c × r^d)))
+```
+
+- `kenza_k1` (décimal, défaut 0,8193 ; anciennement `full_penetration`) — la constante
+  agrégée **K1** de la loi, multiplicateur de la population. Présent dans `kenza` seulement.
+  Une valeur plus élevée augmente toutes les prévisions proportionnellement.
+- `kenza_k2` (décimal, défaut 30 ; anciennement `full_price_scale`) — le seuil de revenu
+  normalisé **K2** de la loi, facteur d'échelle du prix normalisé `pn`. Présent dans `kenza`
+  seulement.
+- `curve_c` (décimal, défaut −6,5992 ; anciennement `k1`) — le coefficient **c** de la
+  courbe logistique. Présent dans `kenza` et `kenza_indexed`.
+- `curve_d` (décimal, défaut 0,3955 ; anciennement `k2`) — le coefficient **d**, exposant du
+  prix normalisé. Présent dans `kenza` et `kenza_indexed`.
+
+Avec `optimize_parameters` = `true`, seuls `curve_c` et `curve_d` sont recalculés ;
+`kenza_k1` et `kenza_k2` restent aux valeurs saisies. Sauf raison précise, laissez les
+quatre à leur valeur par défaut : ce sont celles du classeur Excel de référence.
+
+#### 6.3.5 `distribution_a` et `distribution_b` (décimaux)
+
+- Présents dans : `kenza` et `kenza_indexed`.
+- Fonction : les coefficients **a** (pénétration maximale, défaut 1,1572) et **b**
+  (paramètre de forme, défaut 4,3517) de la même courbe logistique.
+- Conseil : ils ne sont pas recalibrés par `optimize_parameters`. Ne les modifiez pas sans
+  raison : ce sont des constantes de la courbe Kenza, pas des réglages.
 
 ##### 6.3.6 monte_carlo_simulations (entier, défaut 0)
 
-- Présent dans : `kenza_probabilistic`.
-- Fonction : nombre de tirages bootstrap pour estimer les intervalles de confiance. Si la valeur est 0, seuls les intervalles par défaut (±20 %) sont affichés.
-- Impact : plus le nombre est élevé (ex. 1000), plus la distribution des prévisions est précise, mais le calcul est plus long.
-- Conseil : pour une première analyse, laissez 0 ou une valeur faible (100). Pour une étude robuste, utilisez 500 ou 1000.
+- Lu par : `kenza` uniquement. Le paramètre figure aussi dans les valeurs par défaut de
+  `kenza_simplifie`, mais **aucun code ne l'y lit** : le modifier n'a aucun effet.
+- Fonction : dès qu'il est strictement positif, `kenza` remplace le forfait ±20 % par un
+  intervalle à 95 % calculé sur l'écart-type des résidus d'ajustement. Contrairement à ce
+  que le nom laisse croire, aucun tirage Monte-Carlo n'est effectué : la valeur sert de
+  simple interrupteur, et 1 donne exactement le même intervalle que 1000.
+- Conseil : mettez-le à 1 pour obtenir l'intervalle sur résidus, à 0 pour le forfait. Le
+  vrai bootstrap est celui de `kenza_probabilistic`, qui n'est pas disponible.
 
 ### 6.4 Sauvegarde et persistance des paramètres
 
@@ -1017,13 +1065,13 @@ Rôle principal : Nombre de simulations bootstrap
 
 **Valeur par défaut : 0 (désactivé)**
 
-**Paramètre - k1, k2, `full_penetration` **
+**Paramètre - `curve_c`, `curve_d`, `kenza_k1`, `kenza_k2`**
 
 Type : Décimaux
 
-Rôle principal : Courbe de pénétration
+Rôle principal : Courbe de pénétration (`curve_c`, `curve_d`) et constantes K1/K2 de la loi (`kenza_k1`, `kenza_k2`)
 
-**Valeur par défaut : Valeurs calibrées**
+**Valeur par défaut : Valeurs calibrées sur le classeur Excel de référence**
 
 Règle d’or : quand vous débutez, laissez tous les paramètres par défaut, sauf éventuellement `optimize_parameters` que vous pouvez activer pour un meilleur ajustement. Puis, une fois familiarisé, ajustez les taux de croissance selon vos hypothèses macroéconomiques.
 
@@ -1066,14 +1114,12 @@ Avant de cliquer sur le bouton, assurez-vous que :
 
 #### 7.2.2 Procédure pas à pas
 
-1. Cliquez sur le bouton « Lancer le modèle » (dans le panneau de gauche, en dessous de la
-
-zone des paramètres).
+1. Cliquez sur le bouton « Lancer le modèle » (dans le panneau de gauche, en dessous de la zone des paramètres).
 
 2. Observation du calcul :
 
   - La barre de statut en bas du panneau de gauche affiche « Exécution de [nom du modèle]... ».
-  - Le calcul dure généralement moins de 2 secondes (sauf pour le modèle probabiliste avec un grand nombre de simulations). 3. Affichage des résultats :
+  - Le calcul dure généralement moins de 2 secondes ; il s'allonge sur `kenza` si `monte_carlo_simulations` est élevé. 3. Affichage des résultats :
   - Les métriques apparaissent dans la zone de texte en haut de l’onglet « Modèle unique ».
   - Le graphique se dessine automatiquement dans la zone centrale.
   - La barre de statut passe à « Statut : prévision terminée ».
@@ -1163,10 +1209,11 @@ Conseil : si vous trouvez que la prévision semble « déconnectée » de l’hi
 
 #### 7.4.5 Intervalles de confiance
 
-Pour les modèles qui les fournissent (notamment `kenza_probabilistic`), la zone grisée représente l’incertitude autour de la prévision centrale.
+La zone grisée est toujours tracée, mais sa nature dépend de la méthode employée. La colonne `interval_method` de la prévision la nomme explicitement, et la légende du graphique la reprend (voir § 8.4).
 
-- Plus l’horizon s’éloigne, plus l’intervalle s’élargit : c’est normal, l’incertitude croît avec le temps.
-- Si l’intervalle est très large (ex. ±50 %), cela signifie que le modèle est très incertain - il est alors prudent d’utiliser la fourchette basse pour un scénario pessimiste et la fourchette haute pour un scénario optimiste.
+- Avec le forfait ±20 %, la bande ne mesure rien : sa largeur vaut exactement 0,4 fois la prévision. Elle s'élargit donc quand la prévision monte et se resserre quand elle descend, sans aucun rapport avec l'incertitude.
+- Avec l'intervalle à 95 % sur résidus, la largeur est **constante** sur tout l'horizon : ±1,96 écart-type des résidus d'ajustement.
+- Dans les deux cas, l'idée répandue selon laquelle « l'intervalle s'élargit avec l'horizon » ne s'applique pas : aucune des deux méthodes ne fait croître l'incertitude avec la distance à l'horizon.
 
 ### 7.5 En résumé : déroulement d’une prévision
 
@@ -1215,11 +1262,23 @@ Les métriques apparaissent sous forme de texte structuré. Voici comment les in
 | Métrique | Ce qu’elle mesure | Bonne valeur | Que faire si elle est mauvaise ? |
 | --- | --- | --- | --- |
 | RMSE | Écart moyen en passagers, avec pénalisation des grosses erreurs. | La plus petite possible (dépend de l’ordre de grandeur). | Vérifiez la présence d’années atypiques (crise) dans la période d’entraînement. Essayez de les exclure. |
-| MAE | Écart moyen absolu en passagers. Plus intuitif que le RMSE. | La plus petite possible. | Si MAE est élevé, le modèle sous-estime ou surestime systématiquement. Ajustez full_penetration ou la période d’entraînement. |
+| MAE | Écart moyen absolu en passagers. Plus intuitif que le RMSE. | La plus petite possible. | Si MAE est élevé, le modèle sous-estime ou surestime systématiquement. Ajustez `kenza_k1` ou la période d’entraînement. |
 | MAPE | Erreur relative moyenne en pourcentage. | < 5 % : excellent ; 5-10 % : très bon ; 10-20 % : acceptable ; > 20 % : à améliorer. | Une MAPE élevée indique que le modèle peine à reproduire les variations. Activez optimize_parameters ou testez un autre modèle. |
 | R² | Proportion de la variance historique expliquée par le modèle. | > 0,90 : très bon ; 0,80-0,90 : bon ; < 0,70 : insuffisant. | Un R² faible suggère que le modèle ne capture pas les tendances. Vérifiez les variables (population, PIB) et l’absence de ruptures. |
 
 Règle de lecture : ne vous focalisez pas sur une seule métrique. Un modèle avec un RMSE faible mais un R² médiocre peut sur-ajuster les données. Privilégiez la cohérence d’ensemble.
+
+**Attention aux métriques de `kenza_indexed`.** Ce modèle inverse analytiquement la
+distribution à partir du trafic observé : le réappliquer redonne exactement les données
+d'entrée. Ses métriques dans l'échantillon valent donc mécaniquement R² = 1 et RMSE = 0,
+sans mesurer le moindre pouvoir prédictif. Il publie pour cette raison deux jeux de valeurs :
+les clés `in_sample_*` (le calage, toujours parfait) et les clés sans préfixe, qui reprennent
+la **validation glissante hors échantillon** — souvent négatives, et c'est le chiffre à lire.
+Un R² hors échantillon négatif signifie « moins bon que la moyenne de la série ».
+
+Les seuils du tableau ci-dessus (« > 0,90 : très bon ») s'appliquent à un R² **dans**
+l'échantillon. Hors échantillon, sur une série annuelle courte, un R² positif est déjà un
+résultat.
 
 #### 8.1.2 Le graphique historique / prévision
 
@@ -1281,9 +1340,7 @@ Interprétation : Si elle est très éloignée du dernier historique, il y a une
 
 Signification : Différence (première prévision brute - dernier historique).
 
-Interprétation : Un écart positif signifie que le modèle « prévoit » une hausse brutale ; négatif,
-
-une baisse brutale.
+Interprétation : Un écart positif signifie que le modèle « prévoit » une hausse brutale ; négatif, une baisse brutale.
 
 **Indicateur - Écart relatif (%)**
 
@@ -1301,38 +1358,58 @@ Interprétation : Proche de 1,0 = pas d’ajustement. Éloigné de 1,0 = correct
 
 Que faire en cas de fort écart ?
 
-1. Vérifiez la période d’entraînement : si vous avez exclu les années récentes, le modèle peut mal
+1. Vérifiez la période d’entraînement : si vous avez exclu les années récentes, le modèle peut mal connaître la tendance actuelle. Réintégrez les 5 dernières années.
 
-connaître la tendance actuelle. Réintégrez les 5 dernières années.
+2. Vérifiez les paramètres : un `gdp_growth_rate` ou un `ticket_price_inflation` trop éloigné des tendances récentes peut créer une rupture.
 
-2. Vérifiez les paramètres : un `gdp_growth_rate` ou un `ticket_price_inflation` trop éloigné
+3. Changez de modèle : certains modèles (ex. `kenza_simplifie_combine` avec `trend_weight` élevé) prolongent mieux la tendance récente.
 
-des tendances récentes peut créer une rupture.
+### 8.4 Intervalles - comprendre ce que mesure la bande
 
-3. Changez de modèle : certains modèles (ex. `kenza_simplifie_combine` avec `trend_weight` 
+La zone grisée n'est pas toujours un intervalle de confiance. Chaque prévision porte une
+colonne `interval_method` qui nomme la méthode employée, et la légende du graphique reprend
+ce nom : lisez-la avant d'interpréter la bande.
 
-élevé) prolongent mieux la tendance récente.
+#### 8.4.1 `forfait_20pct` - la bande par défaut de tous les modèles
 
-### 8.4 Intervalles de confiance - comprendre l’incertitude
+- Légende affichée : « Bande +/-20 % (indicative, non statistique) ».
+- Méthode : les bornes valent 0,8 et 1,2 fois la prévision centrale.
+- **Ce qu'elle mesure : rien.** Sa largeur vaut 0,4 fois la prévision, quelle que soit la
+  qualité de l'ajustement, la taille de l'échantillon ou la dispersion de l'historique. Deux
+  modèles dont l'un reproduit l'historique au pour-cent près et l'autre s'en écarte de 50 %
+  afficheront la même bande relative.
+- Piège : une bande large ne signale donc pas une prévision fragile, ni une bande étroite une
+  prévision solide. Elle suit le niveau de la prévision, rien d'autre.
 
-L’intervalle de confiance est une fourchette dans laquelle la demande réelle a une certaine probabilité de se situer. Deux cas de figure :
+#### 8.4.2 `residus_z95` - l'intervalle sur résidus (`kenza` seulement)
 
-#### 8.4.1 Intervalle par défaut (tous les modèles)
+- Légende affichée : « IC 95 % (residus, z = 1.96) ».
+- Comment l'obtenir : passer `monte_carlo_simulations` à une valeur strictement positive sur
+  le modèle `kenza`. Aucun autre modèle ne propose cette méthode.
+- Méthode : l'écart-type des résidus d'ajustement sur la période d'entraînement, multiplié
+  par 1,96, de part et d'autre de la prévision centrale ; la borne basse est tronquée à zéro.
+- Ce qu'elle mesure : la dispersion de l'erreur du modèle **sur le passé**. C'est une
+  information réelle, contrairement au forfait.
+- Limite importante : la largeur est **constante** sur tout l'horizon. Elle ne croît pas avec
+  la distance à l'horizon, alors que l'incertitude d'une projection à 20 ans est évidemment
+  supérieure à celle d'une projection à 2 ans. Ne lisez donc pas cette bande comme un
+  intervalle de prévision au sens statistique.
 
-- Méthode : les bornes sont calculées comme ±20 % de la prévision centrale.
-- Utilité : simple et rapide, mais ne reflète pas la vraie incertitude du modèle.
-- Lecture : si la zone grisée est large, considérez que la prévision est fragile.
+#### 8.4.3 `quantiles_bootstrap` - non disponible
 
-#### 8.4.2 Intervalle probabiliste (modèle kenza_probabilistic)
+Une troisième méthode existe dans le code : des quantiles 5 % / 95 % obtenus par
+ré-échantillonnage. Elle est portée par `kenza_probabilistic`, qui n'est pas enregistré dans
+le registre et donc pas sélectionnable (voir § 5.1). Aucune prévision produite aujourd'hui
+par l'interface ne porte cette méthode.
 
-- Méthode : généré par bootstrap (ré-échantillonnage des données historiques). Les bornes sont des quantiles (5 % et 95 %).
-- Avantage : plus réaliste, car il tient compte de la variabilité passée et de l’incertitude des paramètres.
-- Lecture :
-  - La fourchette basse (borne inférieure) correspond à un scénario pessimiste.
-  - La fourchette haute (borne supérieure) à un scénario optimiste.
-  - Plus l’horizon est lointain, plus l’intervalle s’élargit (c’est normal).
+#### 8.4.4 En pratique
 
-Conseil : pour une décision stratégique, utilisez la fourchette basse comme « plan de précaution » et la fourchette haute comme « objectif ambitieux ».
+- Si `interval_method` vaut `forfait_20pct`, ne tirez aucune conclusion de la largeur de la
+  bande. Pour juger de la fiabilité, regardez les métriques hors échantillon (§ 8.1) et le
+  diagnostic de continuité (§ 8.3).
+- Si elle vaut `residus_z95`, la fourchette basse peut servir de plan de précaution et la
+  haute d'objectif, en gardant à l'esprit qu'elle sous-estime l'incertitude des horizons
+  lointains.
 
 ### 8.5 Synthèse et prise de décision
 
@@ -1340,9 +1417,7 @@ Après avoir analysé les métriques, les graphiques et les diagnostics, voici c
 
 #### Étape 1 - Les métriques sont-elles satisfaisantes ? (RMSE, R², MAPE)
 
-Si oui, passez à l’étape 2. Sinon, ajustez la période, activez `optimize_parameters`, ou changez
-
-de modèle.
+Si oui, passez à l’étape 2. Sinon, ajustez la période, activez `optimize_parameters`, ou changez de modèle.
 
 ##### Étape 2 - Le graphique est-il cohérent ? (pas de rupture, tendance naturelle)
 
@@ -1350,15 +1425,11 @@ Si oui, passez à l’étape 3. Sinon, vérifiez le facteur de continuité et le
 
 ##### Étape 3 - L’intervalle de confiance est-il acceptable ? (ni trop large, ni trop étroit)
 
-Si oui, la prévision est exploitable. Si trop large, augmentez les simulations ou utilisez un modèle
-
-plus simple.
+Si oui, la prévision est exploitable. Si trop large, augmentez les simulations ou utilisez un modèle plus simple.
 
 ##### Étape 4 - En comparaison, un autre modèle est-il nettement meilleur ?
 
-Si oui, sélectionnez-le comme modèle de référence. Si les modèles sont proches, retenez le plus
-
-simple (principe de parcimonie).
+Si oui, sélectionnez-le comme modèle de référence. Si les modèles sont proches, retenez le plus simple (principe de parcimonie).
 
 ##### Étape 5 - Quelles sont les hypothèses macroéconomiques (taux de croissance) ?
 
@@ -1404,32 +1475,36 @@ Une fois votre prévision réalisée et analysée, vous souhaiterez probablement
 
 *Tableau 7 - Formats d'export disponibles*
 
-| Format | Extension | Usage recommandé | Contenu principal |
+| Format | Extension | Usage recommandé | Contenu réel |
 | --- | --- | --- | --- |
-| CSV | .csv | Réutilisation dans d’autres outils (tableur, base de données, logiciel statistique) | Un seul tableau : les prévisions année par année. |
-| Excel | .xlsx | Analyse approfondie, partage avec des utilisateurs de tableur | Multi-onglets : prévision, métriques, paramètres, diagnostics, benchmark, backtesting, sensibilité. |
-| PDF | .pdf | Rapport structuré pour présentation ou impression | Document complet : résumé, méthodologie, graphique, données d’entraînement, diagnostics, backtesting, tableau des prévisions. |
+| CSV | .csv | Réutilisation dans d’autres outils (tableur, base de données, logiciel statistique) | Le tableau de prévision, une ligne par année, toutes colonnes comprises. |
+| Excel | .xlsx | Même contenu, pour les utilisateurs de tableur | **Une seule feuille**, identique au CSV. Ni métriques, ni paramètres, ni diagnostics. |
+| PDF | .pdf | Illustration à coller dans une présentation | **Le graphique seul**, tel qu'affiché à l'écran. Ce n'est pas un rapport. |
 
-Conseil : si vous n’êtes pas certain du format à choisir, exportez en PDF pour une présentation claire et en Excel pour une analyse ultérieure. Le CSV est plus technique et sert surtout à l’interopérabilité.
+> Le module `ExportService` du projet sait produire un classeur multi-onglets et un rapport
+> PDF structuré, mais **l'interface graphique ne l'appelle pas** : ses boutons écrivent
+> directement le tableau de prévision et l'image du graphique. Les trois exports portent donc
+> le même contenu sous trois formes. Pour disposer des métriques et des paramètres, recopiez-les
+> depuis la zone de texte de l'onglet « Modèle unique ».
+
+Conseil : exportez en CSV ou en Excel pour les chiffres, en PDF pour l'illustration.
 
 ### 9.2 Export au format CSV
 
-Le format CSV est le plus simple : il produit un fichier texte où chaque ligne correspond à une année de prévision, avec les colonnes suivantes :
+Le format CSV produit un fichier texte où chaque ligne correspond à une année de prévision. Les colonnes principales viennent en tête :
 
-  - year : Année de la prévision
-  - population : Population projetée (selon le taux de croissance choisi)
-  - `gdp_per_capita` : PIB par habitant projeté
-  - `ticket_price` : Prix du billet projeté
+  - `year` : Année de la prévision
   - `predicted_passengers` : Prévision centrale (en passagers)
-  - `predicted_passengers_lower` : Borne inférieure de l’intervalle de confiance
-  - `predicted_passengers_upper` : Borne supérieure de l’intervalle de confiance
+  - `predicted_passengers_lower` / `predicted_passengers_upper` : Bornes de la bande
+  - `interval_method` : Nom de la méthode ayant produit ces bornes (voir § 8.4)
   - `growth_rate` : Taux de croissance annuel de la prévision (en %)
+  - `population`, `gdp_per_capita`, `ticket_price` : Variables explicatives projetées
+
+Suivent les colonnes de diagnostic, par ordre alphabétique : `continuity_adjustment_applied`, `continuity_adjustment_factor`, `continuity_gap`, `continuity_gap_pct`, `continuity_reference_passengers`, et les variantes `*_raw` qui donnent la prévision **avant** correction de continuité. Vous pouvez les ignorer pour un usage courant.
 
 Procédure :
 
-1. Assurez-vous qu’une prévision est affichée dans l’onglet « Modèle unique » (les boutons
-
-d’export ne sont disponibles que dans cet onglet).
+1. Assurez-vous qu’une prévision est affichée dans l’onglet « Modèle unique » (les boutons d’export ne sont disponibles que dans cet onglet).
 
 2. Cliquez sur le bouton « Exporter CSV ».
 
@@ -1445,30 +1520,9 @@ Le fichier CSV peut alors être ouvert dans n’importe quel tableur (Excel, Lib
 
 L’export Excel est le plus complet : il génère un classeur avec plusieurs onglets, chacun contenant une facette différente des résultats. C’est le format idéal pour une analyse approfondie ou pour intégrer les données dans un tableau de bord.
 
-#### 9.3.1 Structure du classeur Excel
+#### 9.3.1 Contenu du classeur Excel
 
-  - Forecast : Le même tableau que le CSV : année par année avec population, PIB, prix, prévision
-
-centrale, bornes, croissance.
-
-  - Metrics : Les métriques de performance (RMSE, MAE, MAPE, R²) du modèle calibré.
-  - Info : Informations générales : nom du modèle, horizon, date d’export.
-  - Parameters : L’ensemble des paramètres utilisés pour la calibration et la prévision.
-  - Diagnostics : Les diagnostics du modèle : scores de fiabilité, avertissements, seuils.
-  - Benchmark : (Si une comparaison a été lancée) Tableau comparatif des métriques pour tous les
-
-modèles testés.
-
-  - Backtesting : (Si des validations croisées sont disponibles) Résultats des tests hors échantillon par
-
-année de coupe.
-
-  - `Validation_Models` : Synthèse des modèles testés en backtesting (par modèle et mode).
-  - Sensitivity : (Si une analyse de sensibilité a été réalisée) Impact de la variation des paramètres sur
-
-la prévision.
-
-  - Scenarios : Résumé des impacts (perte cumulée, année de retour).
+Le classeur contient **une seule feuille**, reprenant exactement le tableau du CSV décrit au § 9.2 — mêmes colonnes, même ordre. Les onglets Metrics, Info, Parameters, Diagnostics, Benchmark, Backtesting, Validation_Models, Sensitivity et Scenarios que décrivait la version précédente de ce guide n'existent pas dans les fichiers produits par l'interface.
 
 #### 9.3.2 Procédure d’export Excel
 
@@ -1482,45 +1536,29 @@ la prévision.
 
 5. Cliquez sur « Enregistrer ».
 
-Note : si certains onglets sont vides (ex. « Scenarios »), ils sont tout de même créés mais vides. Cela ne perturbe pas le reste du classeur.
+Note : si le fichier existe déjà, il est remplacé sans erreur.
 
 ### 9.4 Export au format PDF
 
-L’export PDF produit un rapport structuré prêt à être imprimé ou partagé. Contrairement aux formats tabulaires, il est conçu pour la présentation : il contient des titres, des paragraphes explicatifs, le graphique et les tableaux essentiels.
+Le bouton « Exporter PDF » enregistre **le graphique actuellement affiché**, et rien d'autre : même courbe historique, même prévision, même bande, en vectoriel. Il ne produit ni rapport, ni tableau, ni métrique, ni texte.
 
-#### 9.4.1 Structure du rapport PDF
+#### 9.4.1 Procédure
 
-Le rapport PDF est organisé en 7 pages, chacune dédiée à un aspect de la prévision :
-
-*Tableau 8 - Structure du rapport PDF exporté*
-
-| Page | Titre | Contenu |
-| --- | --- | --- |
-| 1 | Résumé exécutif | Modèle utilisé, horizon, nombre d’observations, métriques clés, première et dernière prévision, croissance totale, interprétation rapide. |
-| 2 | Fiche scientifique du modèle | Description du modèle, formule mathématique (si disponible), paramètres principaux, avantages et limites. |
-| 3 | Trajectoire historique et prévisionnelle | Le graphique avec l’historique (vert) et la prévision (bleu), avec intervalle de confiance. |
-| 4 | Données d’entraînement et continuité | Les 10 dernières années de données historiques, le diagnostic de continuité (écart, facteur d’ajustement). |
-| 5 | Diagnostics du modèle | Métriques détaillées, scores de fiabilité, benchmark RMSE (si comparaison), avertissements. |
-| 6 | Validation temporelle (backtesting) | Résultats de la validation croisée (si disponible) : plis, erreurs par année, stabilité du modèle. |
-| 7 | Tableau des prévisions | Le tableau complet des prévisions (année, brut, ajusté, borne basse, borne haute, croissance). |
-
-#### 9.4.2 Procédure d’export PDF
-
-1. Assurez-vous qu’une prévision est affichée.
+1. Assurez-vous qu’une prévision est affichée — sans graphique à l'écran, l'export refuse de s'exécuter et affiche « Erreur : aucun graphique à enregistrer ».
 
 2. Cliquez sur le bouton « Exporter PDF ».
 
 3. La boîte de dialogue « Enregistrer sous » s’ouvre avec l’extension .pdf.
 
-4. Nommez votre fichier (ex. `rapport_prevision`.pdf) et choisissez son emplacement.
+4. Nommez votre fichier (ex. `graphique_prevision`.pdf) et choisissez son emplacement.
 
 5. Cliquez sur « Enregistrer ».
 
-Conseil : le rapport PDF est généré intégralement en interne (sans dépendre d’un logiciel externe). Il est donc parfaitement autonome et peut être ouvert sur n’importe quel ordinateur.
+Le fichier est autonome et s'ouvre sur n'importe quel poste. Étant vectoriel, il supporte l'agrandissement sans perte, ce qui convient bien à une projection ou à une impression.
 
-### 9.5 Export du graphique seul (via le PDF)
+### 9.5 Récupérer le graphique dans un autre format
 
-Si vous souhaitez uniquement récupérer le graphique (par exemple pour l’intégrer dans une présentation), le moyen le plus simple est d’exporter le PDF, puis d’extraire la page 3 (qui contient le graphique) avec un outil comme un lecteur PDF ou un logiciel de capture d’écran. Alternative : dans une session Julia avancée, vous pouvez sauvegarder le graphique directement avec `savefig(plot, "mon_graphique.png")`, mais cette méthode n’est pas accessible depuis l’interface graphique.
+Le PDF de l'export **est** le graphique : il s'insère directement dans un traitement de texte ou une présentation, sans découpe préalable. Si vous avez besoin d'une image matricielle (PNG), convertissez le PDF, ou, depuis une session Julia, utilisez `savefig(plot, "mon_graphique.png")` — cette voie n'est pas accessible depuis l'interface.
 
 ### 9.6 Conseils et bonnes pratiques
 
@@ -1528,15 +1566,13 @@ Si vous souhaitez uniquement récupérer le graphique (par exemple pour l’int�
 
 **Format recommandé : PDF**
 
-Raison : Le rapport est structuré, lisible et contient toutes les explications.
+Raison : le graphique se comprend d'un coup d'œil. Ajoutez vous-même le commentaire : le PDF ne contient aucun texte.
 
 **Situation - Vous voulez intégrer les données dans un tableau de bord Excel.**
 
 **Format recommandé : Excel**
 
-Raison : Les données sont organisées en onglets, prêtes à être utilisées dans des formules ou
-
-des graphiques.
+Raison : les données sont prêtes à être utilisées dans des formules ou des graphiques. Une seule feuille, à compléter à la main.
 
 **Situation - Vous voulez importer les données dans un autre logiciel (R, Python, base de**
 
@@ -1550,15 +1586,13 @@ Raison : Format universel, léger, facile à lire par n’importe quel outil.
 
 **Format recommandé : PDF**
 
-Raison : Le rapport a une présentation professionnelle et peut être imprimé ou projeté.
+Raison : le graphique est vectoriel, donc net à la projection comme à l'impression. Les chiffres et le commentaire restent à votre charge.
 
 **Situation - Vous voulez comparer plusieurs scénarios (crise vs. référence).**
 
 **Format recommandé : Excel**
 
-Raison : Vous pouvez importer chaque scénario dans un onglet différent et les comparer côte à
-
-côte.
+Raison : exportez chaque scénario dans un fichier séparé, puis rassemblez-les vous-même dans un classeur — l'application n'écrit qu'une feuille par export.
 
 ### 9.7 Que faire si l’export échoue ?
 
@@ -1574,27 +1608,29 @@ Cause probable : Le résultat de la prévision est manquant.
 
 Solution : Relancez la prévision puis réessayez.
 
-**Problème rencontré - Le PDF ne contient pas le graphique.**
+**Problème rencontré - « Erreur : aucun graphique à enregistrer ».**
 
-Cause probable : Le graphique n’a pas été rendu (problème d’affichage).
+Cause probable : Aucune prévision n'a encore été tracée dans cette session.
 
-Solution : Vérifiez que le graphique est visible dans l’interface, puis réexportez.
+Solution : Lancez une prévision, vérifiez que le graphique s'affiche, puis réexportez.
+
+**Problème rencontré - « XLSXError: ... already exists » à l'export Excel.**
+
+Cause probable : Version ancienne de l'application. Le remplacement d'un fichier existant échouait systématiquement, y compris après confirmation dans la boîte de dialogue.
+
+Solution : Corrigé. Si le message persiste, mettez à jour votre copie du projet.
 
 **Problème rencontré - Le fichier ne s’ouvre pas dans Excel.**
 
 Cause probable : Extension incorrecte (ex. .xlsx sauvegardé en CSV).
 
-Solution : Vérifiez le nom du fichier et l’extension. Utilisez les boutons dédiés (ne renommez pas
+Solution : Vérifiez le nom du fichier et l’extension. Utilisez les boutons dédiés (ne renommez pas manuellement l’extension).
 
-manuellement l’extension).
+**Problème rencontré - Le PDF ne contient qu'une image, pas de tableau.**
 
-**Problème rencontré - Le PDF est incomplet (pages manquantes).**
+Cause probable : aucune — c'est le comportement normal, l'export PDF enregistre le graphique seul (§ 9.4).
 
-Cause probable : Mémoire insuffisante ou problème temporaire.
-
-Solution : Fermez d’autres applications, réexportez. Si le problème persiste, exportez en Excel
-
-puis imprimez en PDF depuis Excel.
+Solution : pour les chiffres, exportez en CSV ou en Excel.
 
 ### 9.8 En résumé
 
@@ -1608,13 +1644,13 @@ Résultat : Fichier texte avec les prévisions année par année.
 
 Action : Exporter Excel
 
-Résultat : Classeur multi-onglets avec données, métriques, paramètres, benchmarks.
+Résultat : Une feuille avec le tableau de prévision et ses colonnes de diagnostic.
 
-**Besoin - Présenter ou imprimer un rapport**
+**Besoin - Présenter ou imprimer**
 
 Action : Exporter PDF
 
-Résultat : Document structuré de 7 pages avec graphique, tableaux et explications.
+Résultat : Le graphique seul, en vectoriel.
 
 **Besoin - Partager avec un collègue**
 
@@ -1636,9 +1672,7 @@ Le tableau ci-dessous répertorie les erreurs les plus courantes, leurs causes p
 
 Cause probable : La colonne des années est absente ou mal nommée.
 
-Solution : Renommez votre colonne en year, annee ou date. Vérifiez qu’il n’y a pas d’espace ou
-
-d’accent dans le nom.
+Solution : Renommez votre colonne en year, annee ou date. Vérifiez qu’il n’y a pas d’espace ou d’accent dans le nom.
 
 **Message d’erreur - « Missing required columns: `actual_passengers` »**
 
@@ -1656,9 +1690,7 @@ Solution : Corrigez les données sources (un nombre de passagers ne peut pas êt
 
 Cause probable : La même année apparaît plusieurs fois dans le fichier.
 
-Solution : Supprimez les lignes en double ou regroupez les données par année (ex. en faisant la
-
-moyenne).
+Solution : Supprimez les lignes en double ou regroupez les données par année (ex. en faisant la moyenne).
 
 **Message d’erreur - « Unsupported file type »**
 
@@ -1688,21 +1720,15 @@ Solution : Choisissez un modèle dans la liste (chapitre 5).
 
 **Message d’erreur - « Erreur : Model not fitted »**
 
-Cause probable : La calibration du modèle a échoué (données insuffisantes ou colonnes
+Cause probable : La calibration du modèle a échoué (données insuffisantes ou colonnes manquantes).
 
-manquantes).
-
-Solution : Vérifiez que votre période d’entraînement contient au moins 5 années de données et
-
-que les colonnes population, `gdp_per_capita` et `ticket_price` sont présentes (selon le modèle).
+Solution : Vérifiez que votre période d’entraînement contient au moins 5 années de données et que les colonnes population, `gdp_per_capita` et `ticket_price` sont présentes (selon le modèle).
 
 **Message d’erreur - « Erreur : paramètres JSON invalides »**
 
 Cause probable : Vous avez modifié un paramètre texte avec une syntaxe JSON incorrecte.
 
-Solution : Remettez le paramètre à sa valeur par défaut (rechargez le modèle) ou corrigez la
-
-syntaxe (ex. guillemets manquants).
+Solution : Remettez le paramètre à sa valeur par défaut (rechargez le modèle) ou corrigez la syntaxe (ex. guillemets manquants).
 
 **Message d’erreur - « Erreur : L’année de début doit être inférieure ou égale à l’année de fin »**
 
@@ -1754,7 +1780,7 @@ UTF-8.
 
 **Problème - L’interface ne répond plus (bloquée).**
 
-Cause probable : Calcul long (ex. modèle probabiliste avec 1000 simulations).
+Cause probable : Calcul long (ex. `kenza` avec `monte_carlo_simulations` à 1000).
 
 Solution : Attendez quelques secondes ; si le blocage persiste, fermez et relancez l’application.
 
@@ -1764,27 +1790,19 @@ Pour les prochaines fois, réduisez le nombre de simulations.
 
 Cause probable : Problème de rendu graphique ou de pilote.
 
-Solution : Essayez de redimensionner la fenêtre pour forcer le rafraîchissement. Si le problème
-
-persiste, vérifiez votre installation de GTK (chapitre 2.1).
+Solution : Essayez de redimensionner la fenêtre pour forcer le rafraîchissement. Si le problème persiste, vérifiez votre installation de GTK (chapitre 2.1).
 
 **Problème - Les paramètres ne se mettent pas à jour.**
 
-Cause probable : Vous avez changé d’onglet ou de modèle sans sauvegarder (normalement,
+Cause probable : Vous avez changé d’onglet ou de modèle sans sauvegarder (normalement, c’est automatique).
 
-c’est automatique).
-
-Solution : Parfois, un clic sur un autre contrôle ou un redimensionnement de la fenêtre force la
-
-mise à jour. Si rien ne change, rechargez le modèle (sélectionnez-en un autre, puis revenez).
+Solution : Parfois, un clic sur un autre contrôle ou un redimensionnement de la fenêtre force la mise à jour. Si rien ne change, rechargez le modèle (sélectionnez-en un autre, puis revenez).
 
 **Problème - Le message d’erreur est coupé dans la barre de statut.**
 
 Cause probable : Le texte est trop long pour la barre.
 
-Solution : Regardez la console Julia (le terminal où vous avez lancé l’application) : l’erreur
-
-complète y est affichée avec plus de détails.
+Solution : Regardez la console Julia (le terminal où vous avez lancé l’application) : l’erreur complète y est affichée avec plus de détails.
 
 ### 10.2 Bonnes pratiques pour des prévisions fiables
 
@@ -1794,27 +1812,19 @@ Au-delà de la résolution d’erreurs, adopter de bonnes habitudes vous permett
 
 **Règle - Utilisez une série historique d’au moins 10 ans.**
 
-Pourquoi ? : Les modèles Kenza ont besoin d’un historique suffisant pour estimer les tendances
+Pourquoi ? : Les modèles Kenza ont besoin d’un historique suffisant pour estimer les tendances et les relations économiques.
 
-et les relations économiques.
-
-Comment faire ? : Si vous avez moins de 10 ans, la prévision sera très incertaine. Privilégiez un
-
-modèle simplifié (`kenza_simplifie`).
+Comment faire ? : Si vous avez moins de 10 ans, la prévision sera très incertaine. Privilégiez un modèle simplifié (`kenza_simplifie`).
 
 **Règle - Excluez les années de crise exceptionnelle (ex. 2020).**
 
-Pourquoi ? : Les chocs ponctuels (COVID, guerre) déforment la calibration et peuvent rendre la
-
-prévision trop pessimiste ou trop optimiste.
+Pourquoi ? : Les chocs ponctuels (COVID, guerre) déforment la calibration et peuvent rendre la prévision trop pessimiste ou trop optimiste.
 
 Comment faire ? : Modifiez la période d’entraînement pour exclure ces années (chapitre 4.4).
 
 **Règle - Vérifiez l’homogénéité des unités.**
 
-Pourquoi ? : Le PIB et le prix du billet doivent être dans la même monnaie et à la même base
-
-(constant ou courant).
+Pourquoi ? : Le PIB et le prix du billet doivent être dans la même monnaie et à la même base (constant ou courant).
 
 Comment faire ? : Si vos données sont en monnaies différentes, convertissez-les avant import.
 
@@ -1822,13 +1832,9 @@ Si elles sont en valeurs courantes, attention à l’inflation.
 
 **Règle - Traitez les valeurs manquantes avec soin.**
 
-Pourquoi ? : L’application comble automatiquement les trous par la médiane, mais cela peut
+Pourquoi ? : L’application comble automatiquement les trous par la médiane, mais cela peut masquer des anomalies.
 
-masquer des anomalies.
-
-Comment faire ? : Vérifiez vos données sources. Si une année manque, il vaut mieux la
-
-supprimer que la laisser imputer automatiquement.
+Comment faire ? : Vérifiez vos données sources. Si une année manque, il vaut mieux la supprimer que la laisser imputer automatiquement.
 
 #### 10.2.2 Choix de la période d’entraînement
 
@@ -1883,9 +1889,7 @@ Si un modèle s’écarte nettement, cherchez pourquoi (ex. paramètre extrême)
 
 **Règle - Utilisez l’intervalle comme fourchette, pas comme une certitude.**
 
-Explication : La borne inférieure est un scénario de précaution ; la borne supérieure, un scénario
-
-optimiste.
+Explication : La borne inférieure est un scénario de précaution ; la borne supérieure, un scénario optimiste.
 
 **Règle - Plus l’horizon est long, plus l’intervalle est large.**
 
@@ -1893,9 +1897,7 @@ Explication : C’est normal : l’incertitude s’accumule avec le temps.
 
 **Règle - Si l’intervalle est très étroit (ex. ±5 % à 10 ans), méfiez-vous.**
 
-Explication : Cela peut indiquer un modèle trop rigide ou un sur-ajustement. Essayez le modèle
-
-probabiliste pour une estimation plus réaliste.
+Explication : avec le forfait ±20 %, la largeur de la bande est fixée d'avance et ne dit rien du modèle. Pour une estimation qui dépende réellement des données, utilisez `kenza` avec `monte_carlo_simulations` > 0.
 
 ### 10.3 Trucs et astuces pour le paramétrage fin
 
@@ -1907,19 +1909,15 @@ Recommandation : Laissez-le activé (coché) : il ajuste automatiquement les coe
 
 **Situation - Vous voulez comparer des modèles entre eux.**
 
-Recommandation : Laissez-le activé pour tous : ainsi, la comparaison est équitable (chaque
-
-modèle est optimisé sur ses propres données).
+Recommandation : Laissez-le activé pour tous : ainsi, la comparaison est équitable (chaque modèle est optimisé sur ses propres données).
 
 **Situation - Vous avez des coefficients issus d’une étude externe que vous voulez tester.**
 
-Recommandation : Désactivez-le et saisissez manuellement k1, k2, C1, C2.
+Recommandation : Désactivez-le et saisissez manuellement `curve_c`, `curve_d`, `C1`, `C2`.
 
 **Situation - Vous avez un historique très court (< 8 ans).**
 
-Recommandation : Désactivez-le : l’optimisation sur peu de données peut conduire à des
-
-coefficients aberrants. Utilisez les valeurs par défaut (calibrées sur un historique plus long).
+Recommandation : Désactivez-le : l’optimisation sur peu de données peut conduire à des coefficients aberrants. Utilisez les valeurs par défaut (calibrées sur un historique plus long).
 
 #### 10.3.2 Ajuster trend_weight (modèle combiné)
 
@@ -1944,9 +1942,7 @@ coefficients aberrants. Utilisez les valeurs par défaut (calibrées sur un hist
 
 **Ressource - La console Julia**
 
-Description : Le terminal où vous avez lancé l’application affiche tous les messages d’erreur
-
-détaillés (souvent plus complets que la barre de statut).
+Description : Le terminal où vous avez lancé l’application affiche tous les messages d’erreur détaillés (souvent plus complets que la barre de statut).
 
 **Ressource - Le fichier de log**
 
@@ -1960,19 +1956,13 @@ décrit l’architecture et les modèles en détail.
 
 **Ressource - L’équipe de développement**
 
-Description : Contactez votre tuteur ou le responsable du projet pour toute question non résolue
-
-par ce manuel.
+Description : Contactez votre tuteur ou le responsable du projet pour toute question non résolue par ce manuel.
 
 #### 10.4.2 Que faire si tout échoue ?
 
-1. Redémarrez l’application : fermez la fenêtre, puis relancez julia `gui.jl`. Cela réinitialise l’état
+1. Redémarrez l’application : fermez la fenêtre, puis relancez julia `gui.jl`. Cela réinitialise l’état de l’interface.
 
-de l’interface.
-
-2. Chargez le fichier d’exemple : data/`sample.csv` est fourni. Si les modèles fonctionnent sur cet
-
-exemple, le problème vient de vos données, pas de l’application.
+2. Chargez le fichier d’exemple : data/`sample.csv` est fourni. Si les modèles fonctionnent sur cet exemple, le problème vient de vos données, pas de l’application.
 
 3. Réinstallez les dépendances : dans le dossier du projet, lancez Julia et exécutez
 
@@ -1990,19 +1980,13 @@ Avant chaque prévision importante, passez cette checklist :
 gdp_per_capita, ticket_price).
 ```
 
-● La période d’entraînement est cohérente (au moins 10 ans, sans années de crise
+● La période d’entraînement est cohérente (au moins 10 ans, sans années de crise exceptionnelle).
 
-exceptionnelle).
-
-● Les paramètres `gdp_growth_rate`, `population_growth_rate` et `ticket_price_inflation` 
-
-sont réalistes (basés sur des sources externes ou sur la moyenne historique).
+● Les paramètres `gdp_growth_rate`, `population_growth_rate` et `ticket_price_inflation` sont réalistes (basés sur des sources externes ou sur la moyenne historique).
 
 ● `optimize_parameters` est activé (sauf cas particulier).
 
-● Le modèle choisi est adapté à vos données (ex. `kenza_simplifie_indexe` si pas de prix du
-
-billet).
+● Le modèle choisi est adapté à vos données (ex. `kenza_simplifie_indexe` si pas de prix du billet).
 
 ● Un horizon cohérent est défini (5-15 ans pour une étude stratégique).
 
@@ -2022,14 +2006,15 @@ Cette annexe vous fournit une description détaillée de chaque modèle disponib
 
 *Tableau récapitulatif des modèles*
 
-| Nom affiché | Clé technique | Type | Variables nécessaires | Non-linéarité | Incertitude |
+| Nom affiché | Clé technique | Type | Variables nécessaires | Non-linéarité | Bande fournie |
 | --- | --- | --- | --- | --- | --- |
-| Kenza Econometric | kenza | Non Linéaire | population, PIB/hab., prix | Oui (courbe en S) | Intervalle ±20 % |
-| Kenza Simplifie | kenza_simplifie | Linéaire | population, PIB/hab., prix | Non | Intervalle ±20 % |
-| Kenza Simplifie Combine | kenza_simplifie_combine | Linéaire mixte | population, PIB/hab., prix | Non (mais pondération) | Intervalle ±20 % |
-| Kenza Simplifie Indexe | kenza_simplifie_indexe | Linéaire indexée | population, PIB/hab. (pas de prix) | Non | Intervalle ±20 % |
-| Kenza Indexed | kenza_indexed | indexée | population, PIB/hab. (pas de prix) | Oui (courbe en S) | Intervalle ±20 % |
-| Kenza Probabiliste | kenza_probabilistic | avec bootstrap | population, PIB/hab., prix | Oui | Intervalles quantiles (5 %-95 %) |
+| Kenza Econometric | `kenza` | Non linéaire | population, PIB/hab., prix | Oui (courbe en S) | Forfait ±20 %, ou IC 95 % sur résidus si `monte_carlo_simulations` > 0 |
+| Kenza Simplifie | `kenza_simplifie` | Linéaire | population, PIB/hab., prix | Non | Forfait ±20 % |
+| Kenza Simplifie Combine | `kenza_simplifie_combine` | Linéaire mixte | population, PIB/hab., prix | Non (mais pondération) | Forfait ±20 % |
+| Kenza Simplifie Indexe | `kenza_simplifie_indexe` | Linéaire indexée | population, PIB/hab. (pas de prix) | Non | Forfait ±20 % |
+| Kenza Indexed | `kenza_indexed` | Indexée | population, PIB/hab. (pas de prix) | Oui (courbe en S) | Forfait ±20 % |
+
+Le forfait ±20 % n'est pas un intervalle de confiance : sa largeur est fixée d'avance et ne dépend ni des données ni de la qualité de l'ajustement (§ 8.4).
 
 ### 11.2 Détail de chaque modèle
 
@@ -2053,18 +2038,18 @@ Plus ce rapport est faible, plus le transport aérien est « abordable ».
 
 F = a × (1 - 1 / (1 + exp(b + c × ρ^d)))
 
-  - a : pénétration maximale théorique (défaut = 1,1572)
-  - b : paramètre de forme (défaut = 4,3517)
-  - c (k1) : niveau global (défaut = -6,5992)
-  - d (k2) : sensibilité au prix (défaut = 0,3955) 3. Demande : Demande = pénétration_marché × Population × F
+  - a (`distribution_a`) : pénétration maximale théorique (défaut = 1,1572)
+  - b (`distribution_b`) : paramètre de forme (défaut = 4,3517)
+  - c (`curve_c`) : niveau global (défaut = -6,5992)
+  - d (`curve_d`) : exposant du prix normalisé (défaut = 0,3955) 3. Demande : Demande = `kenza_k1` × Population × F
 
 **Paramètres principaux**
 
-k1 (c): Niveau global de la courbe
+`curve_c` (c) : Niveau global de la courbe
 
 **Valeur par défaut : -6,5992**
 
-k2 (d): Sensibilité au prix relatif
+`curve_d` (d) : Exposant du prix normalisé
 
 **Valeur par défaut : 0,3955**
 
@@ -2076,17 +2061,26 @@ k2 (d): Sensibilité au prix relatif
 
 **Valeur par défaut : 4,3517**
 
-`full_price_scale` : Facteur d’échelle du prix normalisé
+`kenza_k2` : Seuil de revenu normalisé K2 de la loi (facteur d’échelle du prix normalisé)
 
 **Valeur par défaut : 30,0**
 
-`full_penetration`: Part maximale de la population qui prend l’avion
+`kenza_k1` : Constante agrégée K1 de la loi (multiplicateur de la population)
 
 **Valeur par défaut : 0,8193**
 
-`optimize_parameters` : Auto-calibrage de k1 et k2
+`monte_carlo_simulations` : Interrupteur de la bande sur résidus (§ 8.4.2)
 
-Valeur par défaut : false (mais recommandé)
+**Valeur par défaut : 0**
+
+`optimize_parameters` : Auto-calibrage de `curve_c` et `curve_d`
+
+**Valeur par défaut : false** — c'est la valeur qui reproduit le classeur Excel de référence.
+
+> `curve_c`/`curve_d` et `kenza_k1`/`kenza_k2` sont deux couples distincts. Les premiers sont
+> les coefficients c et d de la courbe logistique ; les seconds sont les constantes K1 et K2
+> de la loi de Kenza (cellules B2 et B1 du classeur). Les anciens noms `k1`, `k2`,
+> `full_penetration` et `full_price_scale` entretenaient la confusion entre les deux.
 
 **Avantages**
 
@@ -2267,11 +2261,15 @@ Il s’agit de la version (non-linéaire) du modèle indexé. Comme le modèle s
 
 **Formule**
 
-La même que pour `kenza`, mais en remplaçant le prix normalisé (ρ) par l’indice de PIB : pn = `PIB_ref` / `PIB_par_habitant`(t) F = a × (1 - 1 / (1 + exp(b + c × pn^d))) Demande = penetration × Population × F × facteur_continuité Paramètres principaux k1 (c) : Niveau global de la courbe
+La même que pour `kenza`, mais en remplaçant le prix normalisé (ρ) par l’indice de PIB : pn = `PIB_ref` / `PIB_par_habitant`(t) F = a × (1 - 1 / (1 + exp(b + c × pn^d))) Demande = échelle × Population × F × facteur_continuité
+
+**Paramètres principaux**
+
+`curve_c` (c) : Niveau global de la courbe
 
 **Valeur par défaut : -6,5992**
 
-k2 (d) : Sensibilité à l’indice de PIB
+`curve_d` (d) : Exposant de l’indice de PIB
 
 **Valeur par défaut : 0,3955**
 
@@ -2283,13 +2281,17 @@ k2 (d) : Sensibilité à l’indice de PIB
 
 **Valeur par défaut : 4,3517**
 
-`full_penetration` : Part maximale de la population
+`ref_year`, `ref_gdp_per_capita`, `ref_normalized_traffic`, `ref_elasticity` : Points de référence de l’indexation
 
-**Valeur par défaut : 0,8193**
+**Valeur par défaut : 0** — ils ne se saisissent pas. L’ajustement les calcule sur l’historique, et c’est de là que vient l’échelle du modèle : `kenza_indexed` n’a pas de paramètre `kenza_k1`.
 
-`optimize_parameters` : Auto-calibrage de k1 et k2
+`fare_growth_rate` : Croissance annuelle du tarif indexé
 
-Valeur par défaut : false (recommandé)
+**Valeur par défaut : 0**
+
+`optimize_parameters` : Auto-calibrage de `curve_c` et `curve_d`
+
+**Valeur par défaut : false**
 
 `population_growth_rate` : Croissance future de la population
 
@@ -2314,79 +2316,22 @@ Valeur par défaut : false (recommandé)
 
 Lorsque vous n’avez pas de prix du billet mais que vous souhaitez une modélisation non-linéaire (plafonnement de la demande).
 
-#### 11.2.6 Kenza Probabiliste (kenza_probabilistic)
+#### 11.2.6 Kenza Probabiliste (kenza_probabilistic) - non disponible
 
-**Description**
+> Ce modèle **n'est pas sélectionnable**. Son code existe dans `julia/models/kenza_models.jl`, mais il n'est pas enregistré dans `ModelRegistry` : il n'apparaît ni dans la liste déroulante, ni dans la comparaison, ni dans `run/test.jl`. La section ci-dessous décrit son état réel et ce qui reste à faire avant de l'activer.
 
-Le modèle probabiliste est une extension du modèle Kenza complet qui intègre la quantification de l’incertitude. Au lieu de produire une seule prévision, il génère des centaines (voire des milliers) de prévisions en ré-échantillonnant les données historiques (méthode du bootstrap). Chaque tirage recalibre les paramètres k1 et k2 sur un échantillon aléatoire de l’historique. La distribution des prévisions obtenues permet de calculer des intervalles de confiance réalistes (5 %, 25 %, 75 %, 95 %).
+**Ce que le code fait déjà**
 
-**Principe du bootstrap**
+Il ré-échantillonne l'historique avec remise, recalibre le modèle sur chaque tirage, et calcule les quantiles 5 %, 25 %, 75 % et 95 % de l'ensemble des trajectoires. La prévision produite porte alors `interval_method = quantiles_bootstrap`.
 
-1. On prélève aléatoirement des années dans l’historique (avec remise) pour former un
+**Pourquoi il n'est pas activé**
 
-échantillon de même taille.
+- Son niveau est faux. Il emprunte l'indice normalisé de Kenza Indexed (T×S) mais laisse à 1 les deux constantes que ce dernier calibre (échelle 0,3054 et seuil 0,6636). Selon le jeu de données, la prévision est décalée d'un facteur 0,24 à 2,4 — erreur que le facteur de continuité masque en la ramenant sur la dernière observation.
+- Son bootstrap de paramètres est inerte. Tant que `optimize_parameters` vaut `false`, c'est-à-dire par défaut, chaque tirage repart des mêmes coefficients : les trajectoires ne diffèrent que par le bruit résiduel ajouté, et les quantiles sous-estiment l'incertitude qu'ils prétendent mesurer.
 
-2. On calibre le modèle sur cet échantillon (optimisation de k1 et k2).
+**Ce qu'il faudrait faire**
 
-3. On génère une prévision future avec ces coefficients.
-
-4. On répète cette opération N fois (N = `monte_carlo_simulations`).
-
-5. On calcule les quantiles de l’ensemble des trajectoires.
-
-**Paramètres principaux**
-
-k1 : Valeur initiale pour le bootstrap
-
-**Valeur par défaut : -6,5992**
-
-k2 : Valeur initiale pour le bootstrap
-
-**Valeur par défaut : 0,3955**
-
-`distribution_a` : Pénétration maximale (fixe)
-
-**Valeur par défaut : 1,1572**
-
-`distribution_b` : Paramètre de forme (fixe)
-
-**Valeur par défaut : 4,3517**
-
-`n_simulations` : Nombre de tirages bootstrap
-
-**Valeur par défaut : 1000**
-
-`optimize_parameters` : Optimiser k1/k2 sur chaque tirage
-
-Valeur par défaut : false (recommandé)
-
-`ticket_price_inflation` : Inflation future du billet
-
-**Valeur par défaut : 0,02**
-
-`population_growth_rate` : Croissance future de la population
-
-**Valeur par défaut : 0,01**
-
-`gdp_growth_rate` : Croissance future du PIB/hab.
-
-**Valeur par défaut : 0,03**
-
-**Avantages**
-
-- Fournit des intervalles de confiance basés sur la variabilité réelle des données, pas sur une règle arbitraire.
-- Permet d’évaluer la stabilité des paramètres (si k1 et k2 varient beaucoup, le modèle est fragile).
-- S’intègre parfaitement dans une approche de gestion des risques.
-
-**Limites**
-
-- Temps de calcul plus long (proportionnel à `n_simulations`). Avec 1000 tirages, le calcul peut prendre 5 à 10 secondes.
-- Nécessite un historique suffisamment long (au moins 15 ans pour un bootstrap significatif).
-- Les intervalles de confiance ne capturent pas les ruptures structurelles futures (ex. nouvelle technologie, régulation).
-
-**Cas d’usage recommandé**
-
-Études de risque, scénarios d’incertitude, ou lorsque la prévision doit être accompagnée d’une fourchette quantifiée.
+Calibrer son facteur d'échelle sur le classeur de référence, puis vérifier que le bootstrap fait bien varier les paramètres, avant de le réenregistrer dans `ModelRegistry`. L'activer en l'état le ferait apparaître dans l'interface et dans le classement de `run/test.jl` à côté de modèles valides, avec un niveau faux.
 
 ### 11.3 Guide de choix selon les données disponibles
 
@@ -2399,22 +2344,26 @@ Ce tableau vous aide à sélectionner le modèle en fonction des colonnes que vo
 | year + actual_passengers uniquement | Aucun (les modèles ont besoin de population) | ➡ Ajoutez une colonne population. Sans population, la demande normalisée ne peut pas être calculée. |
 | year + actual_passengers + population | Tous les modèles indexés (kenza_simplifie_indexe, kenza_indexed) | Kenza Simplifie Indexe (simple et rapide). |
 | year + actual_passengers + population + gdp_per_capita | Tous les modèles indexés | Kenza Indexed (si vous voulez une courbe en S) ou Kenza Simplifie Indexe (pour la simplicité). |
-| year + actual_passengers + population + gdp_per_capita + ticket_price | Tous les modèles | Kenza Simplifie pour commencer, puis Kenza Econometric pour une analyse approfondie. Si vous voulez des intervalles de confiance, utilisez Kenza Probabiliste. |
+| year + actual_passengers + population + gdp_per_capita + ticket_price | Tous les modèles | Kenza Simplifie pour commencer, puis Kenza Econometric pour une analyse approfondie — avec `monte_carlo_simulations` > 0 si vous voulez une bande fondée sur les données. |
 
 ### 11.4 Glossaire des paramètres (aide-mémoire)
 
 *Tableau 14 - Glossaire des paramètres*
 
-| Paramètre | Signification | Unité / Format |
-| --- | --- | --- |
-| k1, k2 | Coefficients de la courbe | Réel (peut être négatif pour k1) |
-| C1, C2 | Coefficients de la régression linéaire | Réel (C1 généralement négatif) |
-| distribution_a, distribution_b | Paramètres de forme de la courbe | Réel positif |
-| full_price_scale | Facteur d’échelle du prix normalisé | Réel positif (défaut = 30) |
-| full_penetration | Part maximale de la population qui prend l’avion | Réel entre 0 et 1 (défaut ≈ 0,82) |
-| optimize_parameters | Active ou désactive l’auto-calibrage | Booléen (true / false) |
-| trend_weight | Poids de la tendance dans le modèle combiné | Réel entre 0 et 1 |
-| gdp_growth_rate | Taux de croissance annuel du PIB/hab. | Réel (ex. 0,03 = 3 %) |
-| population_growth_rate | Taux de croissance annuel de la population | Réel (ex. 0,01 = 1 %) |
-| ticket_price_inflation | Taux d’inflation annuel du billet | Réel (ex. 0,02 = 2 %) |
-| monte_carlo_simulations | Nombre de tirages bootstrap | Entier (≥ 1) |
+| Paramètre | Signification | Présent dans | Unité / Format |
+| --- | --- | --- | --- |
+| `curve_c` | Coefficient c de la courbe logistique (ancien nom : `k1`) | `kenza`, `kenza_indexed` | Réel négatif (défaut −6,5992) |
+| `curve_d` | Coefficient d, exposant du prix normalisé (ancien nom : `k2`) | `kenza`, `kenza_indexed` | Réel positif (défaut 0,3955) |
+| `kenza_k1` | Constante agrégée **K1** de la loi (ancien nom : `full_penetration`) | `kenza` | Réel entre 0 et 1 (défaut ≈ 0,82) |
+| `kenza_k2` | Seuil de revenu normalisé **K2** de la loi (ancien nom : `full_price_scale`) | `kenza` | Réel positif (défaut 30) |
+| `distribution_a`, `distribution_b` | Coefficients a et b de la courbe, jamais recalibrés | `kenza`, `kenza_indexed` | Réel positif (1,1572 et 4,3517) |
+| `C1`, `C2` | Coefficients de la régression linéaire | `kenza_simplifie`, `kenza_simplifie_indexe` | Réel (C1 généralement négatif) |
+| `optimize_parameters` | Active l’auto-calibrage | tous | Booléen (défaut `false`) |
+| `trend_weight` | Poids de la tendance | `kenza_simplifie_combine` (défini mais **non lu** dans `kenza`) | Réel entre 0 et 1 |
+| `gdp_growth_rate` | Croissance annuelle du PIB/hab. | exposé par les variantes simplifiées ; utilisé par tous | Réel (défaut 0,03) |
+| `population_growth_rate` | Croissance annuelle de la population | idem | Réel (défaut 0,01) |
+| `ticket_price_inflation` | Inflation annuelle du billet | `kenza_simplifie`, `kenza_simplifie_combine` ; utilisé par tous sauf `kenza_indexed` | Réel (défaut 0,02) |
+| `fare_growth_rate` | Croissance annuelle du tarif indexé | `kenza_indexed` | Réel (défaut 0) |
+| `monte_carlo_simulations` | Interrupteur de la bande sur résidus, **pas** un nombre de tirages | `kenza` (défini mais **non lu** dans `kenza_simplifie`) | Entier (défaut 0) |
+| `ref_year`, `ref_gdp_per_capita`, `ref_normalized_traffic`, `ref_elasticity` | Points de référence de l’indexation, calculés à l’ajustement | `kenza_indexed` | Réel |
+| `linear_window_min_r2`, `min_calibration_points` | Sélection de la fenêtre de calibration linéaire | `kenza_simplifie` | Réel / entier |

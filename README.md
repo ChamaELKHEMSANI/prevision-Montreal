@@ -57,8 +57,9 @@ Le guide utilisateur decrit l'installation, l'interface, le chargement des donne
 le choix et le parametrage des modeles, la lecture des resultats et les exports :
 [docs/Guide_utilisateur.md](docs/Guide_utilisateur.md). Il a ete transcrit du PDF,
 dont la source Google Docs n'est pas versionnee ; c'est desormais la version a
-modifier. Attention : il documente `kenza_probabilistic`, qui n'est ni implemente
-ni enregistre dans le registre.
+modifier. Son contenu a ete mis en accord avec le code : modeles reellement
+enregistres, noms actuels des parametres, nature des bandes d'incertitude et contenu
+reel des exports.
 
 ## Prerequis
 
