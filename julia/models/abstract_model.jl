@@ -148,6 +148,45 @@ function apply_forecast_continuity(forecast_df::DataFrame, training_df::DataFram
     return df
 end
 
+# Provenance des bornes `predicted_passengers_lower` / `_upper`. Elle est portee par la
+# colonne `interval_method` de chaque prevision, pour que l'interface et les exports
+# nomment la bande d'apres ce qu'elle est reellement.
+#
+# L'interface intitulait "IC 95 %" une bande qui, avec les parametres par defaut des cinq
+# modeles, vaut exactement pred*0.8 .. pred*1.2 : un forfait sans contenu statistique. La
+# branche calculant un vrai intervalle sur les residus ne s'active que si
+# `monte_carlo_simulations > 0`, ce qui n'est le defaut d'aucun modele.
+const INTERVAL_FORFAIT = "forfait_20pct"
+const INTERVAL_RESIDUALS = "residus_z95"
+const INTERVAL_BOOTSTRAP = "quantiles_bootstrap"
+
+const _INTERVAL_LABELS = Dict(
+    INTERVAL_FORFAIT    => "Bande +/-20 % (indicative, non statistique)",
+    INTERVAL_RESIDUALS  => "IC 95 % (residus, z = 1.96)",
+    INTERVAL_BOOTSTRAP  => "Intervalle 5-95 % (bootstrap)",
+)
+
+"""
+    interval_label(method) -> String
+
+Intitule lisible d'une methode d'intervalle, pour les graphiques et les rapports.
+Une methode inconnue est nommee prudemment plutot que presentee comme un IC.
+"""
+interval_label(method) = get(_INTERVAL_LABELS, string(method), "Intervalle (methode inconnue)")
+
+"""
+    interval_method(forecast_df) -> String
+
+Methode d'intervalle portee par une prevision. Les previsions produites avant l'ajout de
+la colonne sont traitees comme des forfaits, ce qu'elles etaient.
+"""
+function interval_method(forecast_df)::String
+    if forecast_df isa AbstractDataFrame && "interval_method" in names(forecast_df) && nrow(forecast_df) > 0
+        return string(forecast_df.interval_method[1])
+    end
+    return INTERVAL_FORFAIT
+end
+
 """
     growth_rate(values) -> Vector{Float64}
 

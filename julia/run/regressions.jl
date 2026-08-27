@@ -257,6 +257,40 @@ end
         @test result["metrics"]["RMSE"] != 10.5
     end
 
+    @testset "La provenance des intervalles est declaree, pas supposee" begin
+        # L'interface intitulait "IC 95 %" une bande qui, avec les parametres par defaut des
+        # cinq modeles, vaut exactement pred*0.8 .. pred*1.2. La branche calculant un vrai
+        # intervalle sur les residus n'est atteinte que si monte_carlo_simulations > 0, ce
+        # qui n'est le defaut d'aucun modele.
+        for name in AF.ModelRegistry.list_models()
+            model = AF.ModelRegistry.get_model(name)()
+            Abstract.fit!(model, data)
+            forecast = Abstract.predict(model, 4)
+            @test "interval_method" in names(forecast)
+            @test Abstract.interval_method(forecast) == Abstract.INTERVAL_FORFAIT
+            # Le forfait est bien un forfait : la largeur ne porte aucune information.
+            @test forecast.predicted_passengers_lower ≈ forecast.predicted_passengers .* 0.8
+            @test forecast.predicted_passengers_upper ≈ forecast.predicted_passengers .* 1.2
+        end
+
+        # Un vrai intervalle est declare comme tel.
+        tuned = Models.KenzaModel()
+        Abstract.fit!(tuned, data)
+        residual_based = Abstract.predict(tuned, 4; monte_carlo_simulations=500)
+        @test Abstract.interval_method(residual_based) == Abstract.INTERVAL_RESIDUALS
+        @test !(residual_based.predicted_passengers_upper ≈ residual_based.predicted_passengers .* 1.2)
+
+        probabilistic = Models.KenzaProbabilisticModel()
+        Abstract.fit!(probabilistic, data)
+        @test Abstract.interval_method(Abstract.predict(probabilistic, 4)) == Abstract.INTERVAL_BOOTSTRAP
+
+        # Les intitules ne promettent un IC que lorsque c'en est un.
+        @test !occursin("IC", Abstract.interval_label(Abstract.INTERVAL_FORFAIT))
+        @test occursin("IC 95", Abstract.interval_label(Abstract.INTERVAL_RESIDUALS))
+        # Une methode inconnue est nommee prudemment, jamais presentee comme un IC.
+        @test !occursin("IC", Abstract.interval_label("inconnue"))
+    end
+
     @testset "L'export JSON survit aux valeurs non finies" begin
         # JSON n'admet ni NaN ni Infinity : JSON3.write leve sur un tel nombre. Or le code en
         # produit legitimement (growth_rate sur une prevision nulle, R2 sur variance nulle).

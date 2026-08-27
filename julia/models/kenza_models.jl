@@ -2,7 +2,8 @@ module KenzaModels
 using DataFrames, Statistics, LinearAlgebra, Random
 using ..AbstractModel
 using ..AbstractModel: AbstractForecastingModel, calculate_metrics, apply_forecast_continuity,
-                       rolling_backtest_metrics, growth_rate
+                       rolling_backtest_metrics, growth_rate,
+                       INTERVAL_FORFAIT, INTERVAL_RESIDUALS, INTERVAL_BOOTSTRAP
 using Optim
 
 # Base for Kenza variants
@@ -208,15 +209,18 @@ function AbstractModel.predict(model::KenzaModel, horizon::Int; kwargs...)::Data
         z = 1.96
         lower = max.(0, pred .- z * resid_std)
         upper = pred .+ z * resid_std
+        method = INTERVAL_RESIDUALS
     else
         lower = pred .* 0.8
         upper = pred .* 1.2
+        method = INTERVAL_FORFAIT
     end
-    
+
     df = DataFrame(year=future_years, population=pops, gdp_per_capita=gdps,
                    ticket_price=prices, predicted_passengers=pred,
                    predicted_passengers_lower=lower,
-                   predicted_passengers_upper=upper)
+                   predicted_passengers_upper=upper,
+                   interval_method=fill(method, horizon))
     
     if apply_continuity
         df = apply_forecast_continuity(df, model.train_data)
@@ -334,7 +338,8 @@ function AbstractModel.predict(model::KenzaSimplifieModel, horizon::Int; kwargs.
 
     df = DataFrame(year=future_years, population=pops, gdp_per_capita=gdps,
                    ticket_price=prices, predicted_passengers=pred,
-                   predicted_passengers_lower=lower, predicted_passengers_upper=upper)
+                   predicted_passengers_lower=lower, predicted_passengers_upper=upper,
+                   interval_method=fill(INTERVAL_FORFAIT, horizon))
     if apply_continuity
         df = apply_forecast_continuity(df, model.train_data)
     end
@@ -612,7 +617,8 @@ function AbstractModel.predict(model::KenzaProbabilisticModel, horizon::Int; kwa
         predicted_passengers_lower = lower_05,
         predicted_passengers_upper = upper_95,
         predicted_passengers_q25 = lower_25,
-        predicted_passengers_q75 = upper_75
+        predicted_passengers_q75 = upper_75,
+        interval_method = fill(INTERVAL_BOOTSTRAP, horizon)
     )
     
     model.forecast_samples = all_preds
@@ -922,7 +928,8 @@ function _forecast_df(last_year, pops, gdps, prices, pred;
     upper = pred .* 1.2
     
     df = DataFrame(year=future_years, population=pops, gdp_per_capita=gdps, ticket_price=prices,
-                   predicted_passengers=pred, predicted_passengers_lower=lower, predicted_passengers_upper=upper)
+                   predicted_passengers=pred, predicted_passengers_lower=lower, predicted_passengers_upper=upper,
+                   interval_method=fill(INTERVAL_FORFAIT, length(pred)))
     if apply_continuity && training_df !== nothing
         df = apply_forecast_continuity(df, training_df)
     end

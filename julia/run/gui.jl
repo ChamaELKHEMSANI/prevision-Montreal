@@ -14,6 +14,7 @@ using .AirTrafficForecaster
 
 gr(show=false)
 
+const AbstractModel = AirTrafficForecaster.AbstractModel
 const Registry = AirTrafficForecaster.ModelRegistry
 const ForecastService = AirTrafficForecaster.ForecastService
 const DataService = AirTrafficForecaster.DataService
@@ -64,8 +65,12 @@ function plot_forecast(result, data, model_name)
     if :predicted_passengers_lower in propertynames(forecast_df)
         lower = forecast_df[!, :predicted_passengers_lower]
         upper = :predicted_passengers_upper in propertynames(forecast_df) ? forecast_df[!, :predicted_passengers_upper] : forecast_df.predicted_passengers
+        # La bande etait intitulee "IC 95 %" quelle que soit sa provenance. Avec les
+        # parametres par defaut des cinq modeles elle vaut pred*0.8 .. pred*1.2, un forfait
+        # sans contenu statistique : le libelle suit desormais la colonne interval_method.
+        band_label = AbstractModel.interval_label(AbstractModel.interval_method(forecast_df))
         plot!(p, forecast_df.year, lower,
-              fillrange=upper, fillalpha=0.25, color=:red, label="IC 95 %", lw=0)
+              fillrange=upper, fillalpha=0.25, color=:red, label=band_label, lw=0)
     end
     plot!(p, xlabel="Année", ylabel="Passagers", title="Prévision : $model_name", legend=:topleft)
     return p

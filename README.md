@@ -135,6 +135,23 @@ pour cette raison des metriques de validation glissante hors echantillon (`R2`, 
 ... issues des cles `oos_*`), les valeurs in-sample restant accessibles sous
 `in_sample_*` a titre de controle de calage.
 
+### Intervalles de prevision
+
+`predicted_passengers_lower` et `_upper` n'ont pas la meme signification selon les
+modeles et les parametres. La colonne `interval_method` de chaque prevision porte leur
+provenance:
+
+| Valeur | Signification | Quand |
+|---|---|---|
+| `forfait_20pct` | `pred x 0.8` a `pred x 1.2` — forfait indicatif, sans contenu statistique | defaut de tous les modeles |
+| `residus_z95` | IC 95 % construit sur l'ecart-type des residus historiques (z = 1.96) | `kenza` avec `monte_carlo_simulations > 0` |
+| `quantiles_bootstrap` | quantiles empiriques 5 % / 95 % des tirages | modele probabiliste |
+
+L'interface et `run/test.jl` intitulent la bande d'apres cette colonne. Avec les
+parametres par defaut, la bande affichee est un forfait: la largeur moyenne rapportee par
+`run/test.jl` vaut alors exactement `0.4 x` la moyenne des previsions et ne mesure aucune
+incertitude.
+
 ### Colonnes de prevision
 
 `predicted_passengers` porte toujours la prevision **finale**, correction de continuite
