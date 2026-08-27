@@ -135,6 +135,18 @@ pour cette raison des metriques de validation glissante hors echantillon (`R2`, 
 ... issues des cles `oos_*`), les valeurs in-sample restant accessibles sous
 `in_sample_*` a titre de controle de calage.
 
+Ce backtest est **multi-pas** (`oos_horizon`, 5 ans par defaut), et doit le rester. La
+correction de continuite ancre la premiere annee projetee sur la derniere observation
+d'entrainement: un backtest a un pas reproduit donc exactement la prevision naive "report
+de la derniere valeur" et rend le meme chiffre pour les cinq modeles, sans rien mesurer de
+leur dynamique propre. `AbstractModel.rolling_backtest_metrics` est reutilisable pour
+n'importe quel modele:
+
+```julia
+AirTrafficForecaster.AbstractModel.rolling_backtest_metrics(
+    AirTrafficForecaster.ModelRegistry.get_model("kenza"), data; horizon=5)
+```
+
 ### Intervalles de prevision
 
 `predicted_passengers_lower` et `_upper` n'ont pas la meme signification selon les

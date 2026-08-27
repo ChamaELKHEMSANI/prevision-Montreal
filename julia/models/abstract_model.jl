@@ -49,42 +49,56 @@ function calculate_metrics(actual::AbstractVector, predicted::AbstractVector)::D
 end
 
 """
-    rolling_backtest_metrics(model_factory, data; min_train, params) -> Dict{String,Float64}
+    rolling_backtest_metrics(model_factory, data; min_train, horizon, params) -> Dict{String,Float64}
 
-Validation glissante a un pas : pour chaque annee t au-dela de `min_train`, ajuste un
-modele neuf sur `data[1:t-1]`, predit un pas et compare a l'observation reelle.
+Validation glissante multi-pas : pour chaque annee de coupure au-dela de `min_train`,
+ajuste un modele neuf sur l'historique disponible, projette `horizon` annees et compare
+chacune a l'observation correspondante.
 
 Necessaire pour les modeles dont l'ajustement est une inversion analytique des donnees
-observees (`KenzaIndexedModel`) : leurs metriques dans l'echantillon valent
-mecaniquement R2 = 1 / RMSE = 0 et ne mesurent aucun pouvoir predictif.
+observees (`KenzaIndexedModel`) : leurs metriques dans l'echantillon valent mecaniquement
+R2 = 1 / RMSE = 0 et ne mesurent aucun pouvoir predictif.
+
+L'horizon doit rester superieur a 1. Avec `apply_continuity_adjustment` actif — le defaut,
+et le comportement de l'application — la premiere annee projetee est ancree sur la derniere
+observation d'entrainement : un backtest a un pas reproduit donc exactement la prevision
+naive "report de la derniere valeur", identique pour les cinq modeles, et ne les distingue
+pas. Seules les annees suivantes revelent la dynamique propre du modele.
 
 Les cles sont prefixees `oos_` (out-of-sample) pour ne jamais etre confondues avec les
 metriques dans l'echantillon.
 """
 function rolling_backtest_metrics(model_factory, data::DataFrame;
-                                  min_train::Int=10, params::Dict{String,Any}=Dict{String,Any}())
+                                  min_train::Int=10, horizon::Int=5,
+                                  params::Dict{String,Any}=Dict{String,Any}())
     n = nrow(data)
     start = max(min_train, 3)
-    if n <= start
-        return Dict{String,Float64}()
-    end
+    (n <= start || horizon < 1) && return Dict{String,Float64}()
     actuals = Float64[]
     preds = Float64[]
-    for t in (start + 1):n
+    folds = 0
+    for cutoff in start:(n - 1)
+        steps = min(horizon, n - cutoff)
         try
-            m = model_factory()
-            fit!(m, data[1:(t - 1), :]; (Symbol(k) => v for (k, v) in params)...)
-            forecast = predict(m, 1)
-            nrow(forecast) == 0 && continue
-            push!(preds, Float64(forecast.predicted_passengers[1]))
-            push!(actuals, Float64(data[t, "actual_passengers"]))
+            model = model_factory()
+            kwargs = [Symbol(k) => v for (k, v) in params]
+            fit!(model, data[1:cutoff, :]; kwargs...)
+            forecast = predict(model, steps; kwargs...)
+            nrow(forecast) < steps && continue
+            for step in 1:steps
+                push!(preds, Float64(forecast.predicted_passengers[step]))
+                push!(actuals, Float64(data[cutoff + step, "actual_passengers"]))
+            end
+            folds += 1
         catch err
-            @debug "Backtest fold ignore" year=data[t, "year"] exception=err
+            @debug "Backtest fold ignore" cutoff=data[cutoff, "year"] exception=err
         end
     end
     isempty(preds) && return Dict{String,Float64}()
     metrics = calculate_metrics(actuals, preds)
-    out = Dict{String,Float64}("oos_folds" => Float64(length(preds)))
+    out = Dict{String,Float64}("oos_folds" => Float64(folds),
+                               "oos_horizon" => Float64(horizon),
+                               "oos_points" => Float64(length(preds)))
     for key in ("MAE", "MSE", "RMSE", "MAPE", "R2")
         out["oos_" * key] = metrics[key]
     end

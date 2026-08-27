@@ -72,6 +72,30 @@ end
         @test model.metrics["in_sample_R2"] ≈ 1.0
         @test model.metrics["R2"] != 1.0
         @test model.metrics["oos_folds"] > 0
+        # L'horizon doit rester > 1. Avec la correction de continuite active, la premiere
+        # annee projetee est ancree sur la derniere observation d'entrainement : un backtest
+        # a un pas reproduit la prevision naive et donne le meme chiffre pour les cinq
+        # modeles, sans rien mesurer de leur dynamique.
+        @test model.metrics["oos_horizon"] > 1
+        @test model.metrics["oos_points"] > model.metrics["oos_folds"]
+    end
+
+    @testset "Le backtest distingue reellement les modeles" begin
+        # Garde-fou contre un retour a l'horizon 1 : a horizon 1 les cinq modeles rendent
+        # exactement la derniere observation, donc des metriques identiques.
+        scores = Dict(name => AF.AbstractModel.rolling_backtest_metrics(
+                          AF.ModelRegistry.get_model(name), data; min_train=10, horizon=5)["oos_R2"]
+                      for name in AF.ModelRegistry.list_models())
+        @test length(unique(round.(values(scores), digits=6))) > 1
+
+        # Les parametres doivent atteindre `predict` autant que `fit!` : sans cela
+        # apply_continuity_adjustment restait a son defaut et chaque pli etait ancre.
+        anchored = AF.AbstractModel.rolling_backtest_metrics(
+            AF.ModelRegistry.get_model("kenza"), data; min_train=10, horizon=3)
+        raw = AF.AbstractModel.rolling_backtest_metrics(
+            AF.ModelRegistry.get_model("kenza"), data; min_train=10, horizon=3,
+            params=Dict{String,Any}("apply_continuity_adjustment" => false))
+        @test anchored["oos_R2"] != raw["oos_R2"]
     end
 
     @testset "Petits echantillons : pas de BoundsError" begin
