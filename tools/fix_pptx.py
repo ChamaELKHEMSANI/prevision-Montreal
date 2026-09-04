@@ -223,10 +223,10 @@ ROLLING_TEXT = ("En moyennant toutes les coupures possibles à horizon 5 ans, le
                 "60 à 77 % de la variance hors échantillon, pour 5,5 à 6,4 % d'erreur relative. Ce "
                 "classement-ci résiste à l'hypothèse macro : il perd 0,06 à 0,09 point avec la macro "
                 "observée, sans changer d'ordre, là où celui de la diapositive précédente s'inversait.\n"
-                "Réserve : sur ce jeu synthétique, le trafic 2012-2019 croît de 5,0 % par an quand la "
-                "population avance de 0,7 % et le PIB par habitant de 1,25 %. Aucun modèle fondé sur ces "
-                "moteurs ne peut suivre — ces R² mesurent donc d'abord l'écart entre une trajectoire "
-                "fabriquée et ses propres régresseurs.")
+                "Réserve : le trafic 2012-2019 croît de 5,0 % par an quand la population avance de 0,7 % "
+                "et le PIB par habitant de 1,25 %. YUL surperforme donc les prévisions, et l'écart s'ouvre "
+                "d'année en année. Le combler demande des variables explicatives supplémentaires — par "
+                "exemple des transferts de demande entre aéroports — plutôt qu'un recalibrage.")
 # La reserve et la phrase sur la robustesse ajoutent deux lignes : le pave et sa zone de
 # texte s'allongent d'autant. Le bas du pave passe a 6252160 EMU, le numero de page etant
 # a 6333134 : il n'y a pas de marge pour une ligne de plus.
