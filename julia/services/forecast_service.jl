@@ -16,6 +16,28 @@ function _kwargs(parameters::AbstractDict)
     return Dict(Symbol(string(k)) => v for (k, v) in parameters)
 end
 
+# Les points de prevision transitent par des Dict (ils sont serialises ainsi pour l'API) :
+# `DataFrame(result["forecast"])` en herite l'ordre de parcours, arbitraire. `year` se
+# retrouvait en onzieme colonne du CSV exporte, derriere `continuity_adjustment_applied`.
+# On impose donc un ordre de lecture, les colonnes de diagnostic passant derriere par ordre
+# alphabetique.
+const FORECAST_LEAD_COLUMNS = ["year", "predicted_passengers",
+                               "predicted_passengers_lower", "predicted_passengers_upper",
+                               "interval_method", "growth_rate",
+                               "population", "gdp_per_capita", "ticket_price"]
+
+"""
+    forecast_frame(result) -> DataFrame
+
+Les points de `result["forecast"]` en DataFrame, colonnes dans un ordre lisible.
+"""
+function forecast_frame(result)
+    df = DataFrame(result["forecast"])
+    lead = [c for c in FORECAST_LEAD_COLUMNS if c in names(df)]
+    rest = sort([c for c in names(df) if !(c in FORECAST_LEAD_COLUMNS)])
+    return select(df, vcat(lead, rest))
+end
+
 function run_forecast(model_name::String, data::DataFrame, parameters::AbstractDict, horizon::Int)
     @info "Running forecast" model=model_name horizon=horizon
     parameters = _string_dict(parameters)
@@ -36,10 +58,14 @@ function run_forecast(model_name::String, data::DataFrame, parameters::AbstractD
     # Predict
     forecast_df = predict(model, horizon; kwargs...)
     
-    metrics = Dict("RMSE"=>10.5, "R2"=>0.95)
-    if hasproperty(model, :metrics)
-        metrics = model.metrics
+    # Le repli precedent renvoyait Dict("RMSE"=>10.5, "R2"=>0.95) : des metriques inventees,
+    # et flatteuses, pour tout modele ne respectant pas le contrat AbstractForecastingModel.
+    # Mieux vaut un echec explicite qu'un R2 de 0.95 fabrique.
+    if !hasproperty(model, :metrics)
+        error("Model '$model_name' ($(typeof(model))) exposes no `metrics` field; " *
+              "AbstractForecastingModel implementations must populate it in fit!")
     end
+    metrics = model.metrics
     
     forecast_records = [Dict(string(k) => v for (k, v) in pairs(row)) for row in Tables.namedtupleiterator(forecast_df)]
     
@@ -75,10 +101,17 @@ function sensitivity_analysis(model_name::String, data::DataFrame, parameter::St
 end
 
 function monte_carlo_simulation(model_name::String, data::DataFrame, parameters::Dict{String,Any},
-                                horizon::Int, n_simulations::Int=1000)
+                                horizon::Int, n_simulations::Int=1000; max_simulations::Int=1000)
+    # `min(n_simulations, 100)` tronquait systematiquement le parametre sans rien dire :
+    # la signature annoncait 1000 tirages, le code en faisait 100. Le plafond est desormais
+    # explicite, ajustable, et signale quand il mord.
+    effective = min(n_simulations, max_simulations)
+    if effective < n_simulations
+        @warn "Nombre de simulations plafonne" demande=n_simulations effectif=effective plafond=max_simulations
+    end
     simulations = []
     simulation_metrics = Any[]
-    for _ in 1:min(n_simulations, 100)  
+    for _ in 1:effective
         varied_params = copy(parameters)
         for (k,v) in varied_params
             if v isa Number
@@ -99,12 +132,8 @@ function monte_carlo_simulation(model_name::String, data::DataFrame, parameters:
     return Dict("simulations"=>simulations, "statistics"=>stats)
 end
 
-
-function apply_forecast_continuity(forecast_df::DataFrame, training_df::DataFrame)::DataFrame
-    if nrow(forecast_df) == 0 || nrow(training_df) == 0
-        return forecast_df
-    end     
-    return forecast_df
-end
+# `apply_forecast_continuity` vivait ici en doublon vide (elle renvoyait son argument tel
+# quel) et n'etait appelee nulle part. La seule implementation est AbstractModel.apply_forecast_continuity,
+# que les modeles utilisent deja directement.
 
 end

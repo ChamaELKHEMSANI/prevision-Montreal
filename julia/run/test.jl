@@ -15,6 +15,7 @@ using Statistics
 
 using .AirTrafficForecaster
 
+const AbstractModel = AirTrafficForecaster.AbstractModel
 const Registry = AirTrafficForecaster.ModelRegistry
 const ForecastService = AirTrafficForecaster.ForecastService
 const DataService = AirTrafficForecaster.DataService
@@ -25,9 +26,11 @@ const KENZA_MODELS = [
     "kenza_simplifie",
     "kenza_simplifie_indexe",
     "kenza_indexed",
-    "kenza_simplifie_combine",
-    "kenza_probabilistic"
+    "kenza_simplifie_combine"
 ]
+
+# `kenza_probabilistic` est volontairement absent : modele non implemente, non enregistre
+# dans models/registry.jl. Voir le commentaire de _register_defaults.
 
 
 
@@ -45,6 +48,18 @@ function format_metric(value)
         return string(round(Float64(value), digits=3))
     end
     return "n/a"
+end
+
+# Provenance de la bande, portee par la colonne interval_method de la prevision. Sans
+# elle, "Mean interval width" se lisait comme une mesure d'incertitude alors que pour un
+# forfait +/-20 % elle vaut exactement 0.4 x la moyenne des previsions : un rechelonnement
+# du niveau de prevision, sans contenu propre.
+function forecast_interval_method(result::Dict)
+    forecast = get(result, "forecast", Any[])
+    isempty(forecast) && return "n/a"
+    first_point = first(forecast)
+    first_point isa AbstractDict || return "n/a"
+    return string(get(first_point, "interval_method", AbstractModel.INTERVAL_FORFAIT))
 end
 
 function forecast_interval_width(result::Dict)
@@ -114,6 +129,8 @@ function test_model(
 
         forecast = get(result, "forecast", Any[])
         println("  Forecast points: $(length(forecast))")
+        method = forecast_interval_method(result)
+        println("  Interval: $(AbstractModel.interval_label(method))")
         println("  Mean interval width: $(format_metric(forecast_interval_width(result)))")
 
         return result
@@ -144,6 +161,7 @@ function compare_models_on_data(
             mae=metric_value(metrics, ["MAE", "mae"]),
             r2=metric_value(metrics, ["R2", "r2"]),
             mape=metric_value(metrics, ["MAPE", "mape"]),
+            interval_method=forecast_interval_method(result),
             interval_width=forecast_interval_width(result),
         ))
     end

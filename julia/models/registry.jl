@@ -3,7 +3,7 @@ module ModelRegistry
 using JSON3
 using ..AbstractModel: AbstractForecastingModel
 using ..KenzaModels: KenzaModel, KenzaSimplifieModel, KenzaSimplifieIndexeModel,
-                     KenzaIndexedModel, KenzaSimplifieCombineModel, KenzaProbabilisticModel
+                     KenzaIndexedModel, KenzaSimplifieCombineModel
 
 
 const _models = Dict{String, Type{<:AbstractForecastingModel}}()
@@ -28,7 +28,7 @@ function load_model_metadata()::Dict{String,Any}
     if _metadata_cache[] !== nothing
         return _metadata_cache[]::Dict{String,Any}
     end
-    path = joinpath(dirname(@__DIR__), "config", "model_metadata.json")
+    path = _metadata_path()
     if !isfile(path)
         _metadata_cache[] = Dict{String,Any}()
         return _metadata_cache[]::Dict{String,Any}
@@ -82,7 +82,7 @@ end
 function list_models_by_category()::Dict{String, Vector{Dict{String,Any}}}
 
     categories = Dict(
-        "traditional" => ["kenza", "kenza_simplifie", "kenza_simplifie_combine","kenza_indexed", "kenza_simplifie_indexe","kenza_probabilistic"],
+        "traditional" => ["kenza", "kenza_simplifie", "kenza_simplifie_combine","kenza_indexed", "kenza_simplifie_indexe"],
 
     )
     result = Dict{String, Vector{Dict{String,Any}}}()
@@ -137,14 +137,13 @@ function validate_model_data_requirements(model_name::String, columns::Vector{St
         "kenza_simplifie" => ["actual_passengers", "gdp_per_capita", "population", "ticket_price"],
         "kenza_simplifie_combine" => ["actual_passengers", "gdp_per_capita", "population", "ticket_price"],
         "kenza_simplifie_indexe" => ["actual_passengers", "gdp_per_capita", "population"],
-        "kenza_indexed" => ["actual_passengers", "gdp_per_capita", "population"],
-        "kenza_probabilistic" => ["actual_passengers", "gdp_per_capita", "population", "ticket_price"]
+        "kenza_indexed" => ["actual_passengers", "gdp_per_capita", "population"]
      )
     req = get(required, model_name, ["actual_passengers"])
-    missing = setdiff(req, columns)
-    score = length(req) == 0 ? 0 : (length(req) - length(missing)) / length(req) * 100
-    return Dict("required_columns"=>req, "missing_columns"=>missing,
-                "compatibility_score"=>score, "is_compatible"=>isempty(missing))
+    missing_columns = setdiff(req, columns)
+    score = length(req) == 0 ? 0 : (length(req) - length(missing_columns)) / length(req) * 100
+    return Dict("required_columns"=>req, "missing_columns"=>missing_columns,
+                "compatibility_score"=>score, "is_compatible"=>isempty(missing_columns))
 end
 
 function get_model_capabilities(model_name::String)::Dict{String,Any}
@@ -155,9 +154,7 @@ function get_model_capabilities(model_name::String)::Dict{String,Any}
         "kenza_simplifie" => Dict("best_for"=>"Short to medium-term forecasting (1-5 years)", "time_horizon"=>"Medium-term",
                                   "category"=>"traditional", "complexity"=>"Medium", "interpretability"=>"High"),
         "kenza_simplifie_indexe" => Dict("best_for"=>"Short to medium-term forecasting (1-5 years) with indexation", "time_horizon"=>"Medium-term",
-                                        "category"=>"traditional", "complexity"=>"Medium", "interpretability"=>"High"),
-        "kenza_probabilistic" => Dict("best_for"=>"Probabilistic forecasting and uncertainty quantification", "time_horizon"=>"Variable",
-                                      "category"=>"traditional", "complexity"=>"High", "interpretability"=>"Medium")
+                                        "category"=>"traditional", "complexity"=>"Medium", "interpretability"=>"High")
     )  
 
     return get(capabilities, model_name, Dict("best_for"=>"General forecasting", "time_horizon"=>"Variable",
@@ -171,7 +168,17 @@ function _register_defaults()
     register_model("kenza_simplifie_indexe", KenzaSimplifieIndexeModel)
     register_model("kenza_indexed", KenzaIndexedModel)
     register_model("kenza_simplifie_combine", KenzaSimplifieCombineModel)
-    register_model("kenza_probabilistic", KenzaProbabilisticModel)
+    # `kenza_probabilistic` n'est deliberement PAS enregistre : le modele n'est pas
+    # implemente, il est prevu a plus long terme. Son code reste dans models/kenza_models.jl.
+    #
+    # En l'etat il emprunte l'indice normalise de Indexed Kenza (T*S) mais laisse a 1 les
+    # deux constantes que ce dernier calibre (echelle 0.3054, seuil 0.6636) : son niveau est
+    # faux d'un facteur 0.24 a 2.4 selon le jeu de donnees, erreur masquee par le facteur de
+    # continuite. Son bootstrap de parametres est par ailleurs inerte tant que
+    # `optimize_parameters` vaut false, c'est-a-dire par defaut.
+    #
+    # Ne pas le reenregistrer sans avoir calibre son facteur d'echelle : il apparaitrait
+    # sinon dans la GUI et dans le classement de run/test.jl a cote de modeles valides.
 end
 
 _register_defaults()

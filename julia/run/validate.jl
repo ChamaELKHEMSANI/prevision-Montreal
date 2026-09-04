@@ -1,14 +1,21 @@
 import Pkg
 
-using CSV
-using DataFrames
-using Statistics
-using Tables
-
+# `Pkg.activate` DOIT preceder les `using` : ceux-ci sont resolus contre l'environnement
+# actif au moment ou ils s'executent. Places avant l'activation, ils cherchaient leurs
+# paquets dans l'environnement global de l'utilisateur au lieu de julia/Project.toml, et le
+# script mourait sur `ArgumentError: Package Tables not found in current path` — avant tout
+# calcul, alors que Tables est bien declare comme dependance du projet. Les sept autres
+# scripts de run/ suivent deja cet ordre ; validate.jl etait le seul a en devier.
 const JULIA_ROOT = normpath(joinpath(@__DIR__, ".."))
 Pkg.activate(JULIA_ROOT)
 
 include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
+
+# `using Tables` figurait ici sans qu'aucun symbole du paquet ne soit reference : c'est
+# ForecastService qui s'en sert, et il declare sa propre dependance.
+using CSV
+using DataFrames
+using Statistics
 using .AirTrafficForecaster
 
 const ForecastService = AirTrafficForecaster.ForecastService
@@ -137,10 +144,10 @@ function main()
     full_params = Dict{String,Any}(
         "distribution_a" => param_value(params_table, "Full Kenza", "distribution_a"),
         "distribution_b" => param_value(params_table, "Full Kenza", "distribution_b"),
-        "k1" => param_value(params_table, "Full Kenza", "k1_c"),
-        "k2" => param_value(params_table, "Full Kenza", "k2_d"),
-        "full_price_scale" => param_value(params_table, "Full Kenza", "full_price_scale"),
-        "full_penetration" => param_value(params_table, "Full Kenza", "full_penetration"),
+        "curve_c" => param_value(params_table, "Full Kenza", "k1_c"),
+        "curve_d" => param_value(params_table, "Full Kenza", "k2_d"),
+        "kenza_k2" => param_value(params_table, "Full Kenza", "full_price_scale"),
+        "kenza_k1" => param_value(params_table, "Full Kenza", "full_penetration"),
         "optimize_parameters" => false,
         "apply_continuity_adjustment" => false,
         "monte_carlo_simulations" => 0,
@@ -163,19 +170,23 @@ function main()
    indexed_logistic_params = Dict{String,Any}(
         "distribution_a" => param_value(params_table, "Indexed Kenza", "distribution_a"),
         "distribution_b" => param_value(params_table, "Indexed Kenza", "distribution_b"),
-        "k1" => param_value(params_table, "Indexed Kenza", "k1_c"),
-        "k2" => param_value(params_table, "Full Kenza", "k2_d"),
+        "curve_c" => param_value(params_table, "Indexed Kenza", "k1_c"),
+        "curve_d" => param_value(params_table, "Full Kenza", "k2_d"),
         "ref_year" => param_value(params_table, "Indexed Kenza", "ref_year"),
         "ref_gdp_per_capita" => param_value(params_table, "Indexed Kenza", "ref_gdp_per_capita"),
         "ref_normalized_traffic" => param_value(params_table, "Indexed Kenza", "ref_normalized_traffic"),
         "ref_elasticity" => param_value(params_table, "Indexed Kenza", "simplified_elasticity"),
         "fare_growth_rate" => 0.0,
         "optimize_parameters" => false,
+        # Excel n'ancre pas la premiere prevision sur la derniere observation :
+        # la comparaison doit desactiver la correction de saut pour TOUS les modeles.
+        "apply_continuity_adjustment" => false,
     )
 
     simplified_combine_params = Dict{String,Any}(
         "trend_weight" => 0.5,
         "optimize_parameters" => true,
+        "apply_continuity_adjustment" => false,
     )
 
     model_specs = [

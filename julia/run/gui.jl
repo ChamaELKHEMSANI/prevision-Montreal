@@ -9,11 +9,13 @@ include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
 
 ENV["GKSwstype"] = "100"
 
-using Gtk, GtkReactive, Cairo, Plots, DataFrames, CSV, XLSX, Dates, Statistics, Random, JSON3
+# Dates, Statistics et Random ne servaient qu'a generate_synthetic_data, supprimee.
+using Gtk, GtkReactive, Cairo, Plots, DataFrames, CSV, XLSX, JSON3
 using .AirTrafficForecaster
 
 gr(show=false)
 
+const AbstractModel = AirTrafficForecaster.AbstractModel
 const Registry = AirTrafficForecaster.ModelRegistry
 const ForecastService = AirTrafficForecaster.ForecastService
 const DataService = AirTrafficForecaster.DataService
@@ -36,13 +38,6 @@ function get_text(view::GtkTextView)
     return Gtk.bytestring(ptr)
 end
 
-function parse_parameters_json(text::AbstractString)
-    cleaned = strip(String(text))
-    isempty(cleaned) && return Dict{String,Any}()
-    parsed = JSON3.read(cleaned, Dict{String,Any})
-    return Dict{String,Any}(parsed)
-end
-
 function pretty_json(value)
     return sprint(io -> JSON3.pretty(io, value))
 end
@@ -58,14 +53,18 @@ function render_plot(p)
 end
 
 function plot_forecast(result, data, model_name)
-    forecast_df = DataFrame(result["forecast"])
+    forecast_df = ForecastService.forecast_frame(result)
     p = plot(data.year, data.actual_passengers, label="Historique", lw=2, marker=:circle, color=:blue)
     plot!(p, forecast_df.year, forecast_df.predicted_passengers, label="Prévision", lw=2, linestyle=:dash, color=:red, marker=:square)
     if :predicted_passengers_lower in propertynames(forecast_df)
         lower = forecast_df[!, :predicted_passengers_lower]
         upper = :predicted_passengers_upper in propertynames(forecast_df) ? forecast_df[!, :predicted_passengers_upper] : forecast_df.predicted_passengers
+        # La bande etait intitulee "IC 95 %" quelle que soit sa provenance. Avec les
+        # parametres par defaut des cinq modeles elle vaut pred*0.8 .. pred*1.2, un forfait
+        # sans contenu statistique : le libelle suit desormais la colonne interval_method.
+        band_label = AbstractModel.interval_label(AbstractModel.interval_method(forecast_df))
         plot!(p, forecast_df.year, lower,
-              fillrange=upper, fillalpha=0.25, color=:red, label="IC 95 %", lw=0)
+              fillrange=upper, fillalpha=0.25, color=:red, label=band_label, lw=0)
     end
     plot!(p, xlabel="Année", ylabel="Passagers", title="Prévision : $model_name", legend=:topleft)
     return p
@@ -76,7 +75,7 @@ function plot_comparison(results, data, model_names)
     colors = [:red, :blue, :green, :purple, :orange, :brown]
     for (i, m) in enumerate(model_names)
         if haskey(results[m], "forecast")
-            fdf = DataFrame(results[m]["forecast"])
+            fdf = ForecastService.forecast_frame(results[m])
             col = colors[mod1(i, length(colors))]
             plot!(p, fdf.year, fdf.predicted_passengers, label=m, lw=2, linestyle=:dash, color=col)
         end
@@ -85,10 +84,35 @@ function plot_comparison(results, data, model_names)
     return p
 end
 
-function align_forecast_years!(result, last_input_year::Int)
+"""
+    align_forecast_years!(result, last_training_year)
+
+Recale les annees de prevision sur la derniere annee REELLEMENT utilisee a l'entrainement.
+
+La version precedente recevait la derniere annee du fichier complet et ecrasait
+inconditionnellement `row["year"]` : des que l'utilisateur restreignait la fenetre
+d'entrainement, la prevision etait etiquetee avec des annees posterieures a celles pour
+lesquelles elle avait ete calculee, et le graphique se decalait d'autant.
+
+On ne renumerote donc que si les annees produites par le modele sont absentes ou
+incoherentes, et on part de l'annee de fin d'entrainement.
+"""
+function align_forecast_years!(result, last_training_year::Int)
     forecast = get(result, "forecast", Any[])
+    isempty(forecast) && return result
+    years = [get(row, "year", nothing) for row in forecast]
+    if all(y -> y isa Number && isfinite(y), years)
+        expected = [last_training_year + i for i in 1:length(forecast)]
+        if Int.(round.(Float64.(years))) == expected
+            for (row, year) in zip(forecast, expected)
+                row["year"] = year
+            end
+            return result
+        end
+    end
+    @warn "Annees de prevision incoherentes, renumerotation" depuis=last_training_year
     for (i, row) in enumerate(forecast)
-        row["year"] = last_input_year + i
+        row["year"] = last_training_year + i
     end
     return result
 end
@@ -97,35 +121,18 @@ end
 # Data helpers 
 # ----------------------------------------------------------------------
 
-function generate_synthetic_data(n::Int=30)
-    Random.seed!(42)
-    years = collect(1995:(1995 + n - 1))
-    index = collect(1:n)
-    trend = 1_250_000 .+ 72_000 .* index
-    cycle = 115_000 .* sin.(2 * pi * index ./ 8)
-    shock = [year in 2009:2010 ? -180_000 : year == 2020 ? -520_000 : 0 for year in years]
-    noise = 35_000 .* randn(n)
-    passengers = max.(50_000, trend .+ cycle .+ shock .+ noise)
-    population = 31_000_000 .+ 185_000 .* index .+ 40_000 .* randn(n)
-    gdp = 2_900 .+ 85 .* index .+ 45 .* randn(n)
-    price = 160 .+ 1.8 .* index .+ 3 .* randn(n)
-    return DataFrame(
-        year=years,
-        actual_passengers=passengers,
-        population=population,
-        gdp_per_capita=gdp,
-        ticket_price=price,
-    )
-end
-
 function load_data(filepath::String)
     bytes = read(filepath)
     response = DataService.process_uploaded_bytes(basename(filepath), bytes)
     if !get(response, "success", false)
         error(get(response, "error", "Failed to load data"))
     end
-    data = get(response, "data", Any[])
-    df = DataFrame(data)
+    # `response["data"]` est un APERCU limite a 100 lignes destine a l'affichage : le
+    # construire en jeu d'entrainement tronquait silencieusement toute serie plus longue.
+    df = get(response, "dataframe", nothing)
+    if !(df isa DataFrame)
+        df = DataFrame(get(response, "data", Any[]))
+    end
     if !("year" in names(df)) || !("actual_passengers" in names(df))
         error("Data must contain 'year' and 'actual_passengers'")
     end
@@ -400,6 +407,13 @@ function build_gui()
             spin
         elseif value isa Real
             spin = GtkSpinButton(-1.0e9, 1.0e9, 0.01)
+            # gtk_spin_button_new_with_range deduit le nombre de decimales du pas : 0.01
+            # donne deux decimales. Les constantes de la loi de Kenza en portent bien
+            # davantage, et le widget reinjecte sa valeur AFFICHEE dans l'ajustement des
+            # qu'il perd le focus. curve_d = 0.39546328 devenait donc 0.4 et
+            # kenza_k1 = 0.8193343775346827 devenait 0.82, silencieusement, des que
+            # l'utilisateur cliquait dans le champ. On fixe la precision explicitement.
+            set_gtk_property!(spin, :digits, 8)
             set_gtk_property!(spin, :value, Float64(value))
             spin
         else
@@ -574,26 +588,16 @@ function build_gui()
   
         save_current_parameters!()
         params = single_parameters[model_name]
-        try
-            nothing
-        catch
-            set_gtk_property!(lbl_status, :label, "Erreur : paramètres JSON invalides")
-            return
-        end
-
         set_gtk_property!(lbl_status, :label, "Exécution de $model_name...")
         try
             training_data, start_year, end_year = selected_training_data()
             result = ForecastService.run_forecast(model_name, training_data, params, horizon)
-            last_input_year = Int(round(maximum(skipmissing(app.data.year))))
-            align_forecast_years!(result, last_input_year)
+            align_forecast_years!(result, Int(round(maximum(skipmissing(training_data.year)))))
             app.results["single"] = result
             metrics = get(result, "metrics", Dict{String,Any}())
             metrics_str = "Modèle : $model_name\nPériode d'entraînement : $start_year - $end_year ($(nrow(training_data)) lignes)\nHorizon : $horizon\n"
-            for (k,v) in metrics
-                if v isa Number && isfinite(float(v))
-                    metrics_str *= "$k: $(round(float(v), digits=4))\n"
-                end
+            for (k, v) in AbstractModel.displayable_metrics(metrics)
+                metrics_str *= "$k: $(round(v, digits=4))\n"
             end
             set_text!(text_metrics, metrics_str)
             p = plot_forecast(result, app.data, model_name)
@@ -630,28 +634,22 @@ function build_gui()
         end
         horizon = Int(ceil(get_gtk_property(spin_horizon, :value, Float64)))
         save_current_parameters!()
-        try
-            nothing
-        catch
-            set_gtk_property!(lbl_status, :label, "Erreur : paramètres JSON invalides")
-            return
-        end
-
         set_gtk_property!(lbl_status, :label, "Comparaison en cours...")
         try
             training_data, start_year, end_year = selected_training_data()
-            last_input_year = Int(round(maximum(skipmissing(app.data.year))))
+            last_training_year = Int(round(maximum(skipmissing(training_data.year))))
             results = Dict{String,Any}()
             for m in model_names
                 params = get(comparison_parameters, m, Registry.get_default_params(m))
                 res = ForecastService.run_forecast(m, training_data, params, horizon)
-                align_forecast_years!(res, last_input_year)
+                align_forecast_years!(res, last_training_year)
                 results[m] = res
             end
             app.results["comparison"] = results
             comp_str = "Comparaison (entraînement : $start_year - $end_year, horizon : $horizon)\n"
             comp_str *= "Modèle\tRMSE\tMAE\tR2\tMAPE\n"
-            for (m, res) in results
+            for m in model_names
+                res = results[m]
                 metrics = get(res, "metrics", Dict{String,Any}())
                 rmse = get(metrics, "RMSE", NaN)
                 mae = get(metrics, "MAE", NaN)
@@ -692,11 +690,15 @@ function build_gui()
             file *= ".$ext"
         end
         try
-            forecast_df = DataFrame(result["forecast"])
+            forecast_df = ForecastService.forecast_frame(result)
             if format == "csv"
                 CSV.write(file, forecast_df)
             elseif format == "excel"
-                XLSX.writetable(file, forecast_df)
+                # Sans `overwrite`, XLSX.writetable leve « XLSXError: <fichier> already
+                # exists » : l'export Excel echouait systematiquement des que la cible
+                # existait, c'est-a-dire chaque fois que l'utilisateur confirmait le
+                # remplacement propose par la boite de dialogue.
+                XLSX.writetable(file, forecast_df; overwrite=true)
             elseif format == "pdf"
                 # Save the current plot as PDF
                 if app.current_plot !== nothing
