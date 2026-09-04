@@ -203,9 +203,17 @@ ROLLING_NOTE = ("Backtest glissant : calage initial de 10 ans, puis toutes les c
 ROLLING_TEXT = ("Le classement de la diapositive précédente tient à une seule coupure : un calage 1990-2011, "
                 "puis huit années prédites d'affilée. En moyennant toutes les coupures possibles à horizon "
                 "5 ans, les cinq variantes expliquent 60 à 77 % de la variance hors échantillon, pour 5,5 à "
-                "6,4 % d'erreur relative moyenne. Les deux mesures sont justes : la seconde est plus robuste, "
-                "mais porte sur un horizon plus court. Aucune des deux ne juge un modèle sur les données qui "
-                "l'ont calibré.")
+                "6,4 % d'erreur relative moyenne. La seconde mesure est plus robuste, mais porte sur un "
+                "horizon plus court.\n"
+                "Réserve : sur ce jeu synthétique, le trafic 2012-2019 croît de 5,0 % par an quand la "
+                "population avance de 0,7 % et le PIB par habitant de 1,25 %. Aucun modèle fondé sur ces "
+                "moteurs ne peut suivre — ces R² mesurent donc d'abord l'écart entre une trajectoire "
+                "fabriquée et ses propres régresseurs.")
+
+# La reserve ajoute deux lignes : le pave et sa zone de texte s'allongent d'autant. Le
+# bas du pave passe a 6252160 EMU, le numero de page etant a 6333134 : ca tient, mais il
+# n'y a pas de marge pour une troisieme ligne.
+ROLLING_BOX_GROWTH = 400000
 
 
 def set_sp_text(sp, text):
@@ -300,8 +308,21 @@ rolling = rebuild_table(xml17, values=[list(r) for r in ROLLING_ROWS])
 blocks = SP_RE.findall(rolling)
 edits = {1: ROLLING_TITLE, 7: ROLLING_HEADERS[4], 8: ROLLING_HEADERS[5],
          44: ROLLING_NOTE, 47: ROLLING_TEXT}
-for i, text in edits.items():
-    rolling = rolling.replace(blocks[i], set_sp_text(blocks[i], text), 1)
+GROWN = (45, 47)                                     # le pave arrondi, puis sa zone de texte
+
+def grow(sp):
+    return re.sub(r'(<a:ext cx="\d+" cy=")(\d+)(")',
+                  lambda m: m.group(1) + str(int(m.group(2)) + ROLLING_BOX_GROWTH) + m.group(3),
+                  sp, count=1)
+
+# Une seule passe par forme : la forme 47 est a la fois retexturee et agrandie, et la
+# remplacer deux fois de suite echouerait au second passage, sa chaine ayant change.
+for i in sorted(set(edits) | set(GROWN)):
+    sp = blocks[i]
+    new_sp = set_sp_text(sp, edits[i]) if i in edits else sp
+    if i in GROWN:
+        new_sp = grow(new_sp)
+    rolling = rolling.replace(sp, new_sp, 1)
 
 NEW_SLIDE = "ppt/slides/slide22.xml"        # numero de PARTIE libre : l'ordre d'affichage
                                             # est donne par sldIdLst, pas par le nom de fichier
