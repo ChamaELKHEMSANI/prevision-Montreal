@@ -92,10 +92,9 @@ grep -c 'kenza_simplifie_combine' /tmp/pymupdf4llm.md   # le test decisif
 python3 tools/fix_pptx.py "Previsions AdM.pptx" "Previsions AdM - corrige.pptx"
 ```
 
-Remplace 66 paragraphes sur 10 diapositives pour mettre la presentation en accord
-avec le code audite : chiffres recalcules, noms de parametres actuels, nature reelle
-des bandes d'incertitude, contenu reel des exports, variantes reellement
-enregistrees.
+Met la presentation en accord avec le code audite : chiffres recalcules, noms de
+parametres actuels, nature reelle des bandes d'incertitude, contenu reel des
+exports, variantes reellement enregistrees.
 
 Le script travaille en deux temps.
 
@@ -108,15 +107,28 @@ simplifie combine », pourquoi la colonne « Stabilite » disparait.
 **Phase 2 — modifications structurelles.** Deux choses qu'aucune substitution de
 texte ne peut faire :
 
-- **la 5e ligne du tableau de la diapo 17.** La diapo 8 annonce cinq variantes, la 17
-  n'en comparait que quatre ; la manquante, `kenza_simplifie_indexe`, est celle qui ne
-  demande pas le prix du billet. Les quatre lignes de 548640 EMU sont redistribuees en
-  cinq de 438912 (`5 x 438912 = 4 x 548640`) : le bloc occupe exactement le meme
-  rectangle, donc ni la note de bas de tableau ni le pave « Interpretation » ne bougent.
+- **le tableau de la diapo 17, reconstruit en 5 lignes et 7 colonnes.** Il en comptait
+  4 et 6. La 5e ligne est `kenza_simplifie_indexe` : la diapo 8 annonce cinq variantes,
+  la 17 n'en comparait que quatre, et la manquante est celle qui ne demande pas le prix
+  du billet. La 7e colonne est « R2 macro reelle » (voir plus bas). Les 4 lignes de
+  548640 EMU sont redistribuees en 5 de 438912 (`5 x 438912 = 4 x 548640`) et la colonne
+  des libelles cede 365760 EMU aux six colonnes de chiffres : le bloc occupe exactement
+  le meme rectangle, donc ni la note ni le pave « Interpretation » ne bougent.
+  La mise en avant de « Kenza indexe » — gras, alignement a gauche, teinte propre —
+  disparait : le modele n'est plus le meilleur des cinq des qu'on change d'hypothese macro.
 - **une diapositive neuve, « Validation croisee : backtest glissant », inseree en 18.**
-  Elle est clonee de la diapo 17 remaniee — meme grille, meme zebrage — et sa derniere
-  colonne rappelle le R2 a coupure unique, pour que l'ecart entre les deux protocoles
-  se lise sur la meme ligne.
+  Meme grille, construite depuis la MEME base a 6 colonnes que la 17 — jamais depuis la 17
+  remaniee, `build_table` attendant la grille d'origine. Sa derniere colonne rappelle le R2
+  a coupure unique, pour que l'ecart entre les deux protocoles se lise sur la meme ligne.
+
+> **Pourquoi une colonne « R2 macro reelle ».** Les previsions ne lisent jamais la macro
+> observee : `_future_macro` la projette aux taux supposes, et `rolling_backtest_metrics`
+> fait de meme. Les defauts du code sont population +1 %, PIB +3 %, prix +2 % par an, quand
+> l'observe sur 2012-2019 vaut +0,73 %, +1,25 % et -0,69 %. A huit ans d'horizon l'ecart
+> compose : le classement de la diapo 17 **s'inverse** (Kenza indexe passe de +0,66 a -0,32,
+> Kenza simplifie de -0,05 a +0,46). Le backtest glissant, lui, ne perd que 0,06 a 0,09 point
+> et garde son ordre. Publier la seule colonne par defaut donnait un classement que
+> l'hypothese de scenario suffisait a retourner.
 
 > **Piege a ne pas rejouer.** Une diapositive ajoutee a besoin d'un `rId` libre dans
 > `ppt/_rels/presentation.xml.rels`. Les identifiants n'y suivent pas les diapositives :
@@ -124,6 +136,10 @@ texte ne peut faire :
 > Prendre `rId27` produit un XML valide, une relation dupliquee, et **une diapositive
 > blanche** — la relation resout vers la police. Le script calcule donc le premier
 > identifiant libre, et fait de meme pour le `p:sldId`.
+
+Le dictionnaire `EDITS` ne porte plus d'entree pour la diapo 17 : son tableau, sa note
+et son interpretation sont entierement poses par la phase 2. Deux mecanismes ecrivant
+les memes cellules, c'est le mode de defaillance decrit en fin de ce fichier.
 
 Les chiffres du tableau a coupure unique proviennent d'un calage 1990-2011 et d'une
 validation 2012-2019 sur `julia/data/sample.csv`. Les regenerer :
