@@ -44,8 +44,9 @@
     "label": "Kenza Simplifie",
     "category": "traditionnels",
     "default_params": {
-      "C1": -0.5,
-      "C2": 0.5,
+      "C1": -0.13504193193763592,
+      "C2": 0.21316556991134572,
+      "continuity_weighting": "croissant",
       "optimize_parameters": false,
       "ticket_price_inflation": 0.02,
       "population_growth_rate": 0.01,
@@ -59,10 +60,11 @@
       "formula": "Dn(t) = C1 * pn(t) + C2, avec Dn = passagers / population et pn = prix billet / PIB par habitant",
       "description": "Version lineaire et pedagogique de Kenza. Elle explique la demande normalisee par le prix relatif du transport aerien.",
       "parameters": [
-        "C1: sensibilite au prix normalise, generalement negative",
-        "C2: niveau de demande normalisee",
+        "C1: sensibilite au prix normalise, generalement negative ; valeur par defaut = coefficient calibre du classeur Excel (feuille Simplified Kenza)",
+        "C2: niveau de demande normalisee ; valeur par defaut = coefficient calibre du classeur Excel (feuille Simplified Kenza)",
         "ticket_price_inflation: hypothese de prix futur",
-        "population_growth_rate et gdp_growth_rate: scenarios macro"
+        "population_growth_rate et gdp_growth_rate: scenarios macro",
+        "continuity_weighting: ponderation du facteur de recalage, \"croissant\" (poids 1:n, fidele au classeur Excel, et le plus robuste des deux face a une crise en fin de serie) ou \"recent\" (moyenne non ponderee des 20 % d'annees les plus recentes, qui concentre tout le poids sur une fenetre courte et amplifie donc l'effet d'une annee anormale)"
       ],
       "advantages": [
         "Tres interpretable",
@@ -82,6 +84,7 @@
     "category": "traditionnels",
     "default_params": {
       "trend_weight": 0.5,
+      "continuity_weighting": "croissant",
       "optimize_parameters": false,
       "ticket_price_inflation": 0.02,
       "population_growth_rate": 0.01,
@@ -94,7 +97,8 @@
       "parameters": [
         "trend_weight: poids de la composante tendance entre 0 et 1",
         "ticket_price_inflation: hypothese de prix futur",
-        "population_growth_rate et gdp_growth_rate: scenarios macro"
+        "population_growth_rate et gdp_growth_rate: scenarios macro",
+        "continuity_weighting: ponderation du facteur de recalage, \"croissant\" (poids 1:n, fidele au classeur Excel, et le plus robuste des deux face a une crise en fin de serie) ou \"recent\" (moyenne non ponderee des 20 % d'annees les plus recentes, qui concentre tout le poids sur une fenetre courte et amplifie donc l'effet d'une annee anormale)"
       ],
       "advantages": [
         "Plus proche de la feuille Simplified Kenza Excel",
@@ -111,8 +115,9 @@
     "label": "Kenza Simplifie Indexe",
     "category": "traditionnels",
     "default_params": {
-      "C1": -0.5,
-      "C2": 0.5,
+      "C1": -0.13504193193763592,
+      "C2": 0.21316556991134572,
+      "continuity_weighting": "croissant",
       "optimize_parameters": false,
       "population_growth_rate": 0.01,
       "gdp_growth_rate": 0.03
@@ -122,11 +127,12 @@
       "formula": "pn(t) = PIB_ref / PIB_habitant(t), Dn(t) = max(0, C1 * pn(t) + C2), D(t) = Population(t) * Dn(t) * facteur_continuite",
       "description": "Modele lineaire indexe adapte aux jeux de donnees sans prix du billet. Le premier PIB par habitant observe sert de reference. Les coefficients C1 et C2 peuvent etre calibres automatiquement, puis un facteur de continuite raccorde la prevision au dernier niveau historique.",
       "parameters": [
-        "C1: sensibilite de la demande normalisee a l'indice inverse de PIB par habitant",
-        "C2: niveau de base de la demande normalisee",
+        "C1: sensibilite de la demande normalisee a l'indice inverse de PIB par habitant ; valeur par defaut = coefficient calibre du classeur Excel (feuille Simplified Kenza)",
+        "C2: niveau de base de la demande normalisee ; valeur par defaut = coefficient calibre du classeur Excel (feuille Simplified Kenza)",
         "optimize_parameters: calibre automatiquement C1 et C2 par moindres carres",
         "population_growth_rate: hypothese de croissance annuelle de la population",
-        "gdp_growth_rate: hypothese de croissance annuelle du PIB par habitant"
+        "gdp_growth_rate: hypothese de croissance annuelle du PIB par habitant",
+        "continuity_weighting: ponderation du facteur de recalage, \"croissant\" (poids 1:n, fidele au classeur Excel, et le plus robuste des deux face a une crise en fin de serie) ou \"recent\" (moyenne non ponderee des 20 % d'annees les plus recentes, qui concentre tout le poids sur une fenetre courte et amplifie donc l'effet d'une annee anormale)"
       ],
       "advantages": [
         "Ne necessite pas de donnees de prix du billet",

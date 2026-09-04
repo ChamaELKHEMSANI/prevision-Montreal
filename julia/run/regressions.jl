@@ -476,13 +476,18 @@ end
         # to_json echouait donc la ou CSV, Excel, PDF et HTML passaient sans probleme.
         collapsing = AF.ForecastService.run_forecast(
             "kenza_simplifie", data, Dict{String,Any}("ticket_price_inflation" => 0.35), 5)
-        @test any(isnan, [row["growth_rate"] for row in collapsing["forecast"]])
+        growth = [row["growth_rate"] for row in collapsing["forecast"]]
+        # L'annee ou la prevision s'effondre depend des coefficients par defaut du modele :
+        # elle s'est deplacee de l'indice 2 a l'indice 4 le jour ou C1 et C2 ont pris les
+        # valeurs calibrees du classeur Excel. On localise donc le NaN au lieu de le supposer.
+        nan_index = findfirst(isnan, growth)
+        @test nan_index !== nothing
 
         json = AF.ExportService.to_json(collapsing)
         @test !occursin("NaN", json)
         @test !occursin("Infinity", json)
         reparsed = JSON3.read(json)                       # invalide -> leverait ici
-        @test reparsed["forecast"][2]["growth_rate"] === nothing
+        @test reparsed["forecast"][nan_index]["growth_rate"] === nothing
 
         # Les quatre autres exports acceptaient deja ces valeurs : ils ne doivent pas regresser.
         @test length(AF.ExportService.to_csv(collapsing)) > 0

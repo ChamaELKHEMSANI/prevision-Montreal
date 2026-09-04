@@ -1,14 +1,21 @@
 import Pkg
 
-using CSV
-using DataFrames
-using Statistics
-using Tables
-
+# `Pkg.activate` DOIT preceder les `using` : ceux-ci sont resolus contre l'environnement
+# actif au moment ou ils s'executent. Places avant l'activation, ils cherchaient leurs
+# paquets dans l'environnement global de l'utilisateur au lieu de julia/Project.toml, et le
+# script mourait sur `ArgumentError: Package Tables not found in current path` — avant tout
+# calcul, alors que Tables est bien declare comme dependance du projet. Les sept autres
+# scripts de run/ suivent deja cet ordre ; validate.jl etait le seul a en devier.
 const JULIA_ROOT = normpath(joinpath(@__DIR__, ".."))
 Pkg.activate(JULIA_ROOT)
 
 include(joinpath(JULIA_ROOT, "AirTrafficForecaster.jl"))
+
+# `using Tables` figurait ici sans qu'aucun symbole du paquet ne soit reference : c'est
+# ForecastService qui s'en sert, et il declare sa propre dependance.
+using CSV
+using DataFrames
+using Statistics
 using .AirTrafficForecaster
 
 const ForecastService = AirTrafficForecaster.ForecastService

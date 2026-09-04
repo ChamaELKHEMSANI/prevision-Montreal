@@ -3,8 +3,26 @@ module ExportService
 using DataFrames, XLSX, JSON3, Dates, Tables
 using ..Formatters: prepare_json_for_export
 
+"""
+    _records(value) -> AbstractVector
+
+Les enregistrements d'une section de resultats, quelle que soit la forme qui les porte.
+
+Le garde precedent renvoyait `Any[]` pour tout ce qui n'etait pas un vecteur, en silence.
+Or l'unique appelant, `_comparison_rows`, recoit un **Dict indexe par nom de modele** :
+c'est ainsi que `ForecastService.compare_models` et la GUI publient une comparaison. La
+feuille "comparaison" sortait donc VIDE de chaque export, sans le moindre message. Les deux
+formes sont desormais acceptees, les cles triees pour que l'export soit reproductible, et
+toute autre forme est signalee au lieu d'etre escamotee.
+"""
 function _records(value)
-    value isa AbstractVector ? value : Any[]
+    value isa AbstractVector && return value
+    if value isa AbstractDict
+        return Any[value[k] for k in sort(collect(keys(value)); by=string)]
+    end
+    value === nothing && return Any[]
+    @warn "Section ignoree a l'export : vecteur ou dictionnaire attendu" type=typeof(value)
+    return Any[]
 end
 
 function _sheet!(xf, index::Int, name::String)

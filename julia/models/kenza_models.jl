@@ -75,9 +75,20 @@ function _solve_threshold_for_elasticity(target_elasticity::Real, a::Real, b::Re
     f(r) = _kenza_elasticity(r, a, b, c, d) - Float64(target_elasticity)
     flo, fhi = f(lo), f(hi)
     expand_iter = 0
+    # L'expansion de la borne haute est bornee deux fois : par le compteur d'iterations, et
+    # par `isfinite`. Avec les bornes par defaut le second garde-fou ne peut pas se declencher
+    # (60 fois *1.5 depuis 10 plafonne vers 1.9e11), mais un appelant elargissant `hi` ferait
+    # deborder le Float64 vers Inf, et `f(Inf)` rendrait un NaN dont `sign` ne dit rien : la
+    # dichotomie qui suit travaillerait alors sur un intervalle fictif.
     while sign(flo) == sign(fhi) && expand_iter < 60
         hi *= 1.5
+        if !isfinite(hi)
+            error("Depassement de la borne superieure en cherchant a encadrer l'élasticité " *
+                  "cible $target_elasticity : aucun changement de signe avant Inf")
+        end
         fhi = f(hi)
+        isfinite(fhi) || error("_kenza_elasticity non finie en r = $hi (élasticité cible " *
+                               "$target_elasticity)")
         expand_iter += 1
     end
     if sign(flo) == sign(fhi)
@@ -250,8 +261,18 @@ end
 
 function KenzaSimplifieModel(; name="kenza_simplifie", description="Simplified Kenza: demand vs normalized price")
     params = Dict{String,Any}(
-        "C1" => -0.5,
-        "C2" => 0.5,
+        # Coefficients calibres du classeur Excel, feuille 'Simplified Kenza' (linear_a et
+        # linear_b, releves dans old/kenza_excel_validation_params.csv). Les valeurs d'amorce
+        # precedentes, -0.5 et 0.5, n'etaient calibrees sur rien : elles donnaient un R2 hors
+        # echantillon de -14.3 sur 1990-2019, contre +0.70 avec celles-ci. Elles valent pour
+        # Montreal ; sur une autre paire de villes, activer optimize_parameters.
+        "C1" => -0.13504193193763592,
+        "C2" => 0.21316556991134572,
+        # Ponderation du facteur de recalage : "croissant" (poids 1:n, fidele au classeur
+        # Excel) ou "recent" (moyenne non ponderee des 20 % d'annees les plus recentes).
+        # ATTENTION : "recent" est PLUS sensible aux annees de crise, pas moins.
+        # Voir _continuity_factor pour les mesures.
+        "continuity_weighting" => "croissant",
         "optimize_parameters" => false
     )
     return KenzaSimplifieModel(name, description, params, false, nothing, Dict(), 1.0, 1.0, 1.0)
@@ -288,7 +309,7 @@ function AbstractModel.fit!(model::KenzaSimplifieModel, data::DataFrame; kwargs.
     pred_dn = max.(0.0, C1 .* pn .+ C2)
     pred = pred_dn .* _sanitize_population(data.population)
     
-    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
+    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred, _continuity_weighting(model))
     adjusted = pred .* model.continuity_adjustment_factor
     model.metrics = calculate_metrics(data.actual_passengers, adjusted)
     model.is_fitted = true
@@ -396,7 +417,10 @@ mutable struct KenzaSimplifieCombineModel <: AbstractKenzaModel
     is_fitted::Bool
     train_data::Union{DataFrame, Nothing}
     metrics::Dict{String,Float64}
-    reference_year::Int
+    # `Union{Int,Nothing}` comme dans KenzaModel : l'ancien `Int` initialise a 0 se lisait
+    # comme une annee de reference valide (l'an zero) dans les journaux et les inspections,
+    # alors qu'il ne signifiait que "pas encore calibre".
+    reference_year::Union{Int,Nothing}
     reference_gdp_per_cap::Float64
     reference_ticket_price::Float64
     trend_coef::Vector{Float64}
@@ -407,21 +431,42 @@ end
 function KenzaSimplifieCombineModel(; name="kenza_simplifie_combine", description="Simplified Kenza with trend and elasticity components")
     params = Dict{String,Any}(
         "trend_weight" => 0.5,
+        # Ponderation du facteur de recalage : "croissant" (poids 1:n, fidele au classeur
+        # Excel) ou "recent" (moyenne non ponderee des 20 % d'annees les plus recentes).
+        # ATTENTION : "recent" est PLUS sensible aux annees de crise, pas moins.
+        # Voir _continuity_factor pour les mesures.
+        "continuity_weighting" => "croissant",
         "optimize_parameters" => false,
         "ticket_price_inflation" => 0.02,
         "population_growth_rate" => 0.01,
         "gdp_growth_rate" => 0.03
     )
-    return KenzaSimplifieCombineModel(name, description, params, false, nothing, Dict(), 0, 1.0, 1.0,
+    return KenzaSimplifieCombineModel(name, description, params, false, nothing, Dict(), nothing, 1.0, 1.0,
                                       Float64[0.0, 0.0], Float64[0.0, 0.0], 1.0)
 end
 
 function KenzaSimplifieIndexeModel(; name="kenza_simplifie_indexe", description="Simplified indexed Kenza without direct ticket price")
-    params = Dict{String,Any}("C1"=>-0.5, "C2"=>0.5, "optimize_parameters"=>false)
+    params = Dict{String,Any}(
+        # Coefficients calibres du classeur Excel, feuille 'Simplified Kenza' (linear_a et
+        # linear_b, releves dans old/kenza_excel_validation_params.csv). Les valeurs d'amorce
+        # precedentes, -0.5 et 0.5, n'etaient calibrees sur rien : elles donnaient un R2 hors
+        # echantillon de -14.3 sur 1990-2019, contre +0.70 avec celles-ci. Elles valent pour
+        # Montreal ; sur une autre paire de villes, activer optimize_parameters.
+        "C1" => -0.13504193193763592,
+        "C2" => 0.21316556991134572,
+        # Ponderation du facteur de recalage : "croissant" (poids 1:n, fidele au classeur
+        # Excel) ou "recent" (moyenne non ponderee des 20 % d'annees les plus recentes).
+        # ATTENTION : "recent" est PLUS sensible aux annees de crise, pas moins.
+        # Voir _continuity_factor pour les mesures.
+        "continuity_weighting" => "croissant",
+        "optimize_parameters" => false
+    )
     return KenzaSimplifieIndexeModel(name, description, params, false, nothing, Dict(), 1.0, 1.0)
 end
 
-mutable struct KenzaProbabilisticModel <: AbstractForecastingModel
+# Ce modele heritait directement de AbstractForecastingModel, seul des six variantes Kenza a
+# le faire : toute methode ajoutee sur AbstractKenzaModel l'aurait silencieusement ignore.
+mutable struct KenzaProbabilisticModel <: AbstractKenzaModel
     name::String
     description::String
     parameters::Dict{String,Any}
@@ -654,7 +699,7 @@ function AbstractModel.fit!(model::KenzaSimplifieIndexeModel, data::DataFrame; k
     end
     
     pred = max.(0.0, model.parameters["C1"] .* pn .+ model.parameters["C2"]) .* _sanitize_population(data.population)
-    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
+    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred, _continuity_weighting(model))
     model.metrics = calculate_metrics(data.actual_passengers, pred .* model.continuity_adjustment_factor)
     model.is_fitted = true
     return true
@@ -762,12 +807,13 @@ end
 function AbstractModel.fit!(model::KenzaSimplifieCombineModel, data::DataFrame; kwargs...)::Bool
     _update_params!(model.parameters, kwargs)
     model.train_data = data
-    model.reference_year = Int(data[1, "year"])
+    reference_year = Int(data[1, "year"])
+    model.reference_year = reference_year
     model.reference_gdp_per_cap = Float64(data[1, "gdp_per_capita"])
     model.reference_ticket_price = _reference_ticket_price(data)
     
     dn = Float64.(data.actual_passengers) ./ _sanitize_population(data.population)
-    year_index = Float64.(data.year .- model.reference_year)
+    year_index = Float64.(data.year .- reference_year)
     pn = _price_index(data.ticket_price, data.gdp_per_capita, model.reference_ticket_price, model.reference_gdp_per_cap)
     
     model.trend_coef = hcat(year_index, ones(length(year_index))) \ dn
@@ -779,7 +825,7 @@ function AbstractModel.fit!(model::KenzaSimplifieCombineModel, data::DataFrame; 
     pred_dn = max.(0.0, w .* trend_dn .+ (1.0 - w) .* elasticity_dn)
     pred = pred_dn .* _sanitize_population(data.population)
     
-    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred)
+    model.continuity_adjustment_factor = _continuity_factor(data.actual_passengers, pred, _continuity_weighting(model))
     model.metrics = calculate_metrics(data.actual_passengers, pred .* model.continuity_adjustment_factor)
     model.is_fitted = true
     return true
@@ -789,7 +835,7 @@ function AbstractModel.predict(model::KenzaSimplifieCombineModel, horizon::Int; 
     _ensure_fitted(model)
     last_year, pops, gdps, prices = _future_macro(model.train_data, horizon, kwargs)
     years = collect(last_year+1:last_year+horizon)
-    year_index = Float64.(years .- model.reference_year)
+    year_index = Float64.(years .- _reference_year(model))
     pn = _price_index(prices, gdps, model.reference_ticket_price, model.reference_gdp_per_cap)
     
     trend_dn = model.trend_coef[1] .* year_index .+ model.trend_coef[2]
@@ -839,6 +885,14 @@ end
 
 function _ensure_fitted(model)
     model.is_fitted || error("Model not fitted")
+end
+
+# `reference_year` vaut `nothing` tant que fit! n'a pas tourne. L'accesseur rend l'echec
+# lisible plutot que de laisser l'arithmetique echouer sur un MethodError contre Nothing.
+function _reference_year(model)::Int
+    year = model.reference_year
+    year === nothing && error("$(model.name) : annee de reference indisponible, le modele n'est pas calibre")
+    return year
 end
 
 """
@@ -984,6 +1038,12 @@ end
 
 Recale le modele sur les dernieres annees observees (20 % de l'echantillon, au moins 3 ans).
 
+Toute la masse porte sur cette fenetre courte, ce qui rend le facteur tres sensible a une
+anomalie recente : sur `data/sample.csv`, retirer 2020 et 2021 le deplace de 24 % pour
+`KenzaModel`, contre 0,2 % pour `_weighted_continuity_factor`. `KenzaModel` et
+`KenzaProbabilisticModel` utilisent cette regle sans alternative — voir la section "reste a
+faire" du rapport d'audit.
+
 La fenetre est bornee par `length(pred)` : `max(3, ...)` seul provoquait un `BoundsError`
 des que l'echantillon comptait moins de 3 lignes.
 """
@@ -997,19 +1057,57 @@ function _recent_continuity_factor(actual, pred)::Float64
     return total > 0 ? sum(recent_actual) / total : 1.0
 end
 
-# UNE SEULE DÉFINITION - Version avec poids croissants (plus proche d'Excel)
-function _continuity_factor(actual, pred)
+"""
+    _weighted_continuity_factor(actual, pred) -> Float64
+
+Recalage sur tout l'echantillon, poids croissants `1:n`. Reproduit le classeur Excel.
+
+Ces poids privilegient les dernieres annees, mais moins qu'il n'y parait : sur les 34 annees
+de `data/sample.csv`, les six dernieres n'en portent que 31,8 %, contre 100 % pour la fenetre
+de `_recent_continuity_factor`. C'est donc la ponderation la PLUS robuste des deux face a une
+crise en fin de serie — retirer 2020 et 2021 deplace ce facteur de 0,1 a 0,2 % sur les modeles
+correctement calibres, contre 10 a 12 % pour la fenetre recente. Elle est de surcroit celle du
+classeur de reference, donc celle qui garde l'ecart Julia/Excel a ~5 % de MAPE.
+"""
+function _weighted_continuity_factor(actual, pred)
     n = length(pred)
     if n == 0
         return 1.0
     end
-    # Utilise toutes les données avec poids croissant
     weights = collect(1.0:1.0:n) ./ sum(1.0:1.0:n)
     if sum(weights .* pred) > 0
         return sum(weights .* actual) / sum(weights .* pred)
     end
     return 1.0
 end
+
+# Ponderations admises pour le recalage des variantes simplifiees.
+const CONTINUITY_WEIGHTINGS = ("croissant", "recent")
+
+"""
+    _continuity_factor(actual, pred, weighting) -> Float64
+
+Facteur de recalage du modele, selon la ponderation demandee.
+
+- `"croissant"` (defaut) : poids `1:n` sur tout l'echantillon, fidele au classeur Excel.
+- `"recent"` : moyenne non ponderee sur les 20 % d'annees les plus recentes (au moins 3),
+  la regle deja retenue par `KenzaModel` et `KenzaProbabilisticModel`. Concentre tout le
+  poids sur une fenetre courte : c'est le regime le PLUS expose a une crise en fin de serie,
+  et non l'inverse. A ne retenir que pour une serie recente jugee plus representative que
+  son historique.
+
+La ponderation etait auparavant imposee : le parametre `continuity_weighting` la rend
+choisissable sans changer le comportement par defaut.
+"""
+function _continuity_factor(actual, pred, weighting)
+    key = lowercase(strip(string(weighting)))
+    key == "croissant" && return _weighted_continuity_factor(actual, pred)
+    key == "recent" && return _recent_continuity_factor(actual, pred)
+    error("continuity_weighting inconnu : \"$weighting\". Valeurs admises : " *
+          join(CONTINUITY_WEIGHTINGS, ", "))
+end
+
+_continuity_weighting(model) = get(model.parameters, "continuity_weighting", "croissant")
 
 _proxy_or_ticket_price(model, data::DataFrame) = data.ticket_price
 
