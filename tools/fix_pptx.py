@@ -266,6 +266,27 @@ def rebuild_table(xml, extra_row=None, values=None):
     return xml.replace(old, new)
 
 
+# Correction de chevauchement reprise du commit cb4dc2a (« Fix a minor overlap issue »),
+# faite directement dans le .pptx publie : l'etiquette « Envie de voyager » de la diapo 5
+# debordait de sa zone. Elle est elargie de 2076600 a 2267536 EMU et recalee a gauche pour
+# rester centree. Rejouee ici parce que le passage suivant du script l'aurait effacee —
+# c'est exactement le piege que signale tools/README.md.
+OVERLAP_FIXES = {5: {"Envie de voyager": (1165007, 2842025, 2267536, 300300)}}
+
+for slide, boxes in OVERLAP_FIXES.items():
+    key = f"ppt/slides/slide{slide}.xml"
+    xml = items[key].decode("utf-8")
+    for label, (x, y, cx, cy) in boxes.items():
+        found = [sp for sp in SP_RE.findall(xml) if para_text(sp) == label]
+        if len(found) != 1:
+            raise SystemExit(f"diapo {slide} : {label!r} attendu une fois, trouve {len(found)}")
+        moved = re.sub(r'<a:off x="-?\d+" y="-?\d+"/>', f'<a:off x="{x}" y="{y}"/>',
+                       found[0], count=1)
+        moved = re.sub(r'<a:ext cx="\d+" cy="\d+"/>', f'<a:ext cx="{cx}" cy="{cy}"/>',
+                       moved, count=1)
+        xml = xml.replace(found[0], moved, 1)
+    items[key] = xml.encode("utf-8")
+
 SLIDE17 = "ppt/slides/slide17.xml"
 xml17 = rebuild_table(items[SLIDE17].decode("utf-8"), extra_row=SPLIT_ROW_5)
 items[SLIDE17] = xml17.encode("utf-8")
