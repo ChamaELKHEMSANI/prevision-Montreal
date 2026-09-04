@@ -97,14 +97,36 @@ avec le code audite : chiffres recalcules, noms de parametres actuels, nature re
 des bandes d'incertitude, contenu reel des exports, variantes reellement
 enregistrees.
 
-Le dictionnaire `EDITS` porte, diapositive par diapositive, chaque texte d'origine
-et son remplacement, avec un commentaire expliquant pourquoi. **C'est la trace des
-decisions editoriales** : quel chiffre remplace quel chiffre, pourquoi la ligne
-« Kenza probabiliste » devient « Kenza simplifie combine », pourquoi la colonne
-« Stabilite » disparait.
+Le script travaille en deux temps.
 
-Les chiffres proviennent d'un calage 1990-2011 et d'une validation 2012-2019 sur
-`julia/data/sample.csv`. Les regenerer :
+**Phase 1 — substitution de texte.** Le dictionnaire `EDITS` porte, diapositive par
+diapositive, chaque texte d'origine et son remplacement, avec un commentaire
+expliquant pourquoi. **C'est la trace des decisions editoriales** : quel chiffre
+remplace quel chiffre, pourquoi la ligne « Kenza probabiliste » devient « Kenza
+simplifie combine », pourquoi la colonne « Stabilite » disparait.
+
+**Phase 2 — modifications structurelles.** Deux choses qu'aucune substitution de
+texte ne peut faire :
+
+- **la 5e ligne du tableau de la diapo 17.** La diapo 8 annonce cinq variantes, la 17
+  n'en comparait que quatre ; la manquante, `kenza_simplifie_indexe`, est celle qui ne
+  demande pas le prix du billet. Les quatre lignes de 548640 EMU sont redistribuees en
+  cinq de 438912 (`5 x 438912 = 4 x 548640`) : le bloc occupe exactement le meme
+  rectangle, donc ni la note de bas de tableau ni le pave « Interpretation » ne bougent.
+- **une diapositive neuve, « Validation croisee : backtest glissant », inseree en 18.**
+  Elle est clonee de la diapo 17 remaniee — meme grille, meme zebrage — et sa derniere
+  colonne rappelle le R2 a coupure unique, pour que l'ecart entre les deux protocoles
+  se lise sur la meme ligne.
+
+> **Piege a ne pas rejouer.** Une diapositive ajoutee a besoin d'un `rId` libre dans
+> `ppt/_rels/presentation.xml.rels`. Les identifiants n'y suivent pas les diapositives :
+> apres `rId26` (la 21e et derniere) viennent seize polices embarquees, jusqu'a `rId43`.
+> Prendre `rId27` produit un XML valide, une relation dupliquee, et **une diapositive
+> blanche** — la relation resout vers la police. Le script calcule donc le premier
+> identifiant libre, et fait de meme pour le `p:sldId`.
+
+Les chiffres du tableau a coupure unique proviennent d'un calage 1990-2011 et d'une
+validation 2012-2019 sur `julia/data/sample.csv`. Les regenerer :
 
 ```bash
 julia --project=julia -e '
@@ -118,6 +140,22 @@ for n in R.list_models()
     f = A.predict(m, nrow(te))
     println(n, "  ", A.calculate_metrics(Float64.(te.actual_passengers),
                                           Float64.(f.predicted_passengers)))
+end'
+```
+
+Ceux du backtest glissant viennent de `rolling_backtest_metrics`, sur la meme serie
+tronquee a 2019 :
+
+```bash
+julia --project=julia -e '
+include("julia/AirTrafficForecaster.jl"); using .AirTrafficForecaster, DataFrames
+AF=AirTrafficForecaster; A=AF.AbstractModel; R=AF.ModelRegistry
+d = AF.DataService.coerce_schema!(AF.DataService.normalize_column_names(
+      AF.DataService._read_csv_bytes(read("julia/data/sample.csv"))))
+d19 = filter(r -> r.year <= 2019, d)
+for n in R.list_models()
+    println(n, "  ", A.rolling_backtest_metrics(R.get_model(n), d19;
+                                                min_train=10, horizon=5))
 end'
 ```
 
